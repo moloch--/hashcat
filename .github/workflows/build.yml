@@ -18,27 +18,27 @@ on:
   push:
     branches:
       - master
-    tags:
-      - v*
+    # tags:
+    #   - v*
     paths:
-      - 'OpenCL/**.h'
-      - 'OpenCL/**.cl'
-      - 'include/**.h'
-      - 'src/**.c'
-      - 'tools/**'
-      - '**/Makefile'
-      - '.github/workflows/build.yml'
+      - "OpenCL/**.h"
+      - "OpenCL/**.cl"
+      - "include/**.h"
+      - "src/**.c"
+      - "tools/**"
+      - "**/Makefile"
+      - ".github/workflows/build.yml"
   pull_request:
     branches:
       - master
     paths:
-      - 'OpenCL/**.h'
-      - 'OpenCL/**.cl'
-      - 'include/**.h'
-      - 'src/**.c'
-      - 'tools/**'
-      - '**/Makefile'
-      - '.github/workflows/build.yml'
+      - "OpenCL/**.h"
+      - "OpenCL/**.cl"
+      - "include/**.h"
+      - "src/**.c"
+      - "tools/**"
+      - "**/Makefile"
+      - ".github/workflows/build.yml"
 
 jobs:
   build-linux:
