@@ -3,8 +3,6 @@ name: Build
 env:
   include_paths: |
     charsets/
-    docs/
-    extra/
     layouts/
     masks/
     modules/
@@ -12,7 +10,6 @@ env:
     rules/
     tunings/
     tools/
-    example*
     hashcat*
     libhashcat*
 
