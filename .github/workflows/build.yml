@@ -10,6 +10,8 @@ env:
     modules/
     OpenCL/
     rules/
+    tunings/
+    tools/
     example*
     hashcat*
     libhashcat*
@@ -18,8 +20,6 @@ on:
   push:
     branches:
       - master
-    # tags:
-    #   - v*
     paths:
       - "OpenCL/**.h"
       - "OpenCL/**.cl"
@@ -45,46 +45,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shared: [0, 1]
-    name: Build Linux (${{ matrix.shared == 0 && 'Static' || 'Shared' }})
+        shared: [0]
+    name: Build Linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       - name: Build
         env:
           SHARED: ${{ matrix.shared }}
         run: make
+
       - name: Generate artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: hashcat-linux-${{ matrix.shared == 0 && 'static' || 'shared' }}
+          name: hashcat-linux_amd64
           path: ${{ env.include_paths }}
 
   build-macos:
     strategy:
       fail-fast: false
       matrix:
-        shared: [0, 1]
-    name: Build macOS (${{ matrix.shared == 0 && 'Static' || 'Shared' }})
+        shared: [0]
+    name: Build macOS
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
+
       - name: Build
         env:
           SHARED: ${{ matrix.shared }}
         run: make
+
       - name: Generate artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: hashcat-macos-${{ matrix.shared == 0 && 'static' || 'shared' }}
+          name: hashcat-darwin_universal
           path: ${{ env.include_paths }}
 
   build-windows:
     strategy:
       fail-fast: false
       matrix:
-        shared: [0, 1]
-    name: Build Windows (${{ matrix.shared == 0 && 'Static' || 'Shared' }})
+        shared: [0]
+    name: Build Windows
     runs-on: windows-latest
     steps:
       - name: Install libiconv
@@ -97,14 +101,38 @@ jobs:
             libiconv
             libiconv-devel
             make
+
       - uses: actions/checkout@v3
       - name: Build
         shell: msys2 {0}
         env:
           SHARED: ${{ matrix.shared }}
         run: make
+
       - name: Generate artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: hashcat-windows-${{ matrix.shared == 0 && 'static' || 'shared' }}
+          name: hashcat-windows_amd64
           path: ${{ env.include_paths }}
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+
+    name: "Release"
+    if: startsWith( github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - run: mkdir -p ./builds
+      - uses: actions/download-artifact@v3
+        with:
+          path: ./builds
+
+      - name: "Publish Release"
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: true
+          files: |
+            ./builds/*
