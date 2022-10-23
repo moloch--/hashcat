@@ -122,15 +122,20 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - run: mkdir -p ./builds
+      - run: |
+        mkdir -p ./builds
+        mkdir -p ./downloads
       - uses: actions/download-artifact@v3
         with:
-          path: ./builds
+          path: ./downloads
 
       - name: "Publish Release"
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: true
+          prerelease: false
           files: |
-            ./builds/*
+            zip -r hashcat-linux_amd64.zip ./downloads/hashcat-linux_amd64
+            zip -r hashcat-darwin_universal.zip ./downloads/hashcat-darwin_universal
+            zip -r hashcat-windows_amd64.zip ./downloads/hashcat-windows_amd64
+            ./builds/*.zip
