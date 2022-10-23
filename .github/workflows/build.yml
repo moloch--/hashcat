@@ -132,8 +132,8 @@ jobs:
       - name: Zip artifacts
         run: |
           cd ./downloads/hashcat-linux_amd64 && zip -r ../../builds/hashcat-linux_amd64.zip . && cd ../..
-          cd ./downloads/hashcat-linux_amd64 && zip -r ../../builds/hashcat-darwin_universal.zip . && cd ../..
-          cd ./downloads/hashcat-linux_amd64 && zip -r ../../builds/hashcat-windows_amd64.zip . && cd ../..
+          cd ./downloads/hashcat-darwin_universal && zip -r ../../builds/hashcat-darwin_universal.zip . && cd ../..
+          cd ./downloads/hashcat-windows_amd64 && zip -r ../../builds/hashcat-windows_amd64.zip . && cd ../..
 
       - name: "Publish Release"
         uses: "marvinpinto/action-automatic-releases@latest"
