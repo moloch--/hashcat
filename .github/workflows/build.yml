@@ -122,9 +122,9 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - run: |
-        mkdir -p ./builds
-        mkdir -p ./downloads
+      - run: mkdir -p ./builds
+      - run: mkdir -p ./downloads
+
       - uses: actions/download-artifact@v3
         with:
           path: ./downloads
