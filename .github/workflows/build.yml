@@ -129,13 +129,15 @@ jobs:
         with:
           path: ./downloads
 
+      - name: Zip artifacts
+        run: |
+          zip -r hashcat-linux_amd64.zip ./downloads/hashcat-linux_amd64
+          zip -r hashcat-darwin_universal.zip ./downloads/hashcat-darwin_universal
+          zip -r hashcat-windows_amd64.zip ./downloads/hashcat-windows_amd64
+
       - name: "Publish Release"
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
-          files: |
-            zip -r hashcat-linux_amd64.zip ./downloads/hashcat-linux_amd64
-            zip -r hashcat-darwin_universal.zip ./downloads/hashcat-darwin_universal
-            zip -r hashcat-windows_amd64.zip ./downloads/hashcat-windows_amd64
-            ./builds/*.zip
+          files: ./builds/*.zip
