@@ -380,6 +380,7 @@ LFLAGS_NATIVE           += -lpsapi
 LFLAGS_NATIVE           += -liconv
 LFLAGS_NATIVE           += -lws2_32
 LFLAGS_NATIVE           += -lpowrprof
+LFLAGS_NATIVE		    += -static -static-libgcc -static-libstdc++
 endif # MSYS2
 
 # CCFLAGS only for C compiler
