@@ -12,6 +12,7 @@ env:
     tools/
     hashcat*
     libhashcat*
+    *.dll
 
 on:
   push:
@@ -107,8 +108,9 @@ jobs:
           SHARED: ${{ matrix.shared }}
         run: |
           make
+          copy D:\\a\\_temp\\msys64\\usr\\bin\\msys-2.0.dll .
+          copy D:\\a\\_temp\\msys64\\usr\\bin\\msys-iconv-2.dll .
           ls
-          ls D:\\a\\_temp\\msys64\\usr\\bin
 
       - name: Generate artifacts
         uses: actions/upload-artifact@v3
