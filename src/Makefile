@@ -179,7 +179,7 @@ COMPTIME                := $(shell date +%s)
 ## General compiler and linker options
 ##
 
-LFLAGS                  := $(LDFLAGS) -static -static-libgcc -static-libstdc++ -Wl,-Bstatic
+LFLAGS                  ?= $(LDFLAGS)
 
 ifeq ($(PRODUCTION),0)
 CFLAGS                  += -W
