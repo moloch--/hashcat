@@ -179,7 +179,7 @@ COMPTIME                := $(shell date +%s)
 ## General compiler and linker options
 ##
 
-LFLAGS                  ?= $(LDFLAGS)
+LFLAGS ?=
 
 ifeq ($(PRODUCTION),0)
 CFLAGS                  += -W
