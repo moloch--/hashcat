@@ -105,11 +105,10 @@ jobs:
         shell: msys2 {0}
         env:
           SHARED: ${{ matrix.shared }}
-          LFAGS: -static -static-libgcc -static-libstdc++ -Wl,-Bstatic
         run: |
           make
           ls
-          ls D:\a\_temp\msys64\usr\bin
+          ls D:\\a\\_temp\\msys64\\usr\\bin
 
       - name: Generate artifacts
         uses: actions/upload-artifact@v3
