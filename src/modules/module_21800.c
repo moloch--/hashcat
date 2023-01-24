@@ -66,6 +66,27 @@ typedef struct electrum_tmp
 
 static const char *SIGNATURE_ELECTRUM = "$electrum$5*";
 
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+{
+  // problem with this kernel is the huge amount of register pressure on u8 tmp[TMPSIZ];
+  // some runtimes cant handle it by swapping it to global memory
+  // it leads to CL_KERNEL_WORK_GROUP_SIZE to return 0 and later we will divide with 0
+  // workaround would be to rewrite kernel to use global memory
+
+  if (device_param->opencl_device_vendor_id == VENDOR_ID_INTEL_SDK)
+  {
+    return true;
+  }
+
+  // AppleM1, OpenCL, MTLCompilerService never-end
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
+  {
+    return true;
+  }
+
+  return false;
+}
+
 u64 module_esalt_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
   const u64 esalt_size = (const u64) sizeof (electrum_t);
@@ -85,26 +106,6 @@ u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED con
   const u32 pw_max = PW_MAX;
 
   return pw_max;
-}
-
-bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
-{
-  if (device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE)
-  {
-    // self-test failed
-    if ((device_param->opencl_device_vendor_id == VENDOR_ID_INTEL_SDK) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
-    {
-      return true;
-    }
-
-    // AppleM1, OpenCL, MTLCompilerService never-end (pure/optimized kernel)
-    if ((device_param->opencl_device_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
-    {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)

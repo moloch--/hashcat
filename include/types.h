@@ -3,8 +3,8 @@
  * License.....: MIT
  */
 
-#ifndef _TYPES_H
-#define _TYPES_H
+#ifndef TYPES_H
+#define TYPES_H
 
 #include "common.h"
 
@@ -1640,8 +1640,8 @@ typedef struct hc_device_param
 
   #if defined (__APPLE__)
 
-  int               mtl_major;
-  int               mtl_minor;
+  //int               mtl_major;
+  //int               mtl_minor;
 
   int               device_physical_location;
   int               device_location_number;
@@ -3060,4 +3060,4 @@ typedef enum hash_category
 
 typedef aes_ctx AES_KEY;
 
-#endif // _TYPES_H
+#endif // TYPES_H

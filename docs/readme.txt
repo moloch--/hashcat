@@ -91,6 +91,7 @@ NVIDIA GPUs require "NVIDIA Driver" (440.64 or later) and "CUDA Toolkit" (9.0 or
 - md5(sha1($salt).md5($pass))
 - md5(strtoupper(md5($pass)))
 - md5(utf16le($pass).$salt)
+- md5(md5($salt).md5(md5($pass)))
 - sha1($pass.$salt)
 - sha1($salt.$pass)
 - sha1($salt.$pass.$salt)
@@ -139,6 +140,8 @@ NVIDIA GPUs require "NVIDIA Driver" (440.64 or later) and "CUDA Toolkit" (9.0 or
 - HMAC-Streebog-256 (key = $salt), big-endian
 - HMAC-Streebog-512 (key = $pass), big-endian
 - HMAC-Streebog-512 (key = $salt), big-endian
+- HMAC-RIPEMD160 (key = $pass)
+- HMAC-RIPEMD160 (key = $salt)
 - CRC32
 - CRC32C
 - CRC64Jones
@@ -160,6 +163,7 @@ NVIDIA GPUs require "NVIDIA Driver" (440.64 or later) and "CUDA Toolkit" (9.0 or
 - scrypt
 - phpass
 - TACACS+
+- DANE RFC7929/RFC8162 SHA2-256
 - SIP digest authentication (MD5)
 - IKE-PSK MD5
 - IKE-PSK SHA1
@@ -401,12 +405,16 @@ NVIDIA GPUs require "NVIDIA Driver" (440.64 or later) and "CUDA Toolkit" (9.0 or
 - Telegram Desktop >= v2.1.14 (PBKDF2-HMAC-SHA512)
 - Telegram Mobile App Passcode (SHA256)
 - Skype
+- Anope IRC Services (enc_sha256)
 - MetaMask Wallet
 - BitShares v0.x - sha512(sha512_bin(pass))
 - Bitcoin/Litecoin wallet.dat
 - Bitcoin WIF private key (P2PKH)
 - Bitcoin WIF private key (P2SH(P2WPKH))
 - Bitcoin WIF private key (P2WPKH, Bech32)
+- Bitcoin raw private key (P2PKH)
+- Bitcoin raw private key (P2SH(P2WPKH))
+- Bitcoin raw private key (P2WPKH, Bech32)
 - Electrum Wallet (Salt-Type 1-3)
 - Electrum Wallet (Salt-Type 4)
 - Electrum Wallet (Salt-Type 5)

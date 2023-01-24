@@ -237,6 +237,8 @@ GeForce_RTX_3080_Ti                             ALIAS_nv_sm50_or_higher
 GeForce_RTX_3090                                ALIAS_nv_sm50_or_higher
 GeForce_RTX_3090_Ti                             ALIAS_nv_sm50_or_higher
 
+GeForce_RTX_4070_Ti                             ALIAS_nv_sm50_or_higher
+GeForce_RTX_4080                                ALIAS_nv_sm50_or_higher
 GeForce_RTX_4090                                ALIAS_nv_sm50_or_higher
 
 ##
@@ -258,3 +260,6 @@ gfx908:sramecc+:xnack-                          ALIAS_AMD_MI100
 Device_73bf                                     ALIAS_AMD_RX6900XT
 gfx1030                                         ALIAS_AMD_RX6900XT
 Radeon_RX_6900_XT                               ALIAS_AMD_RX6900XT
+
+Radeon_Pro_W5700X                               ALIAS_AMD_W5700X
+Radeon_Pro_W5700X_Compute_Engine                ALIAS_AMD_W5700X

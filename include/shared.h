@@ -3,8 +3,8 @@
  * License.....: MIT
  */
 
-#ifndef _SHARED_H
-#define _SHARED_H
+#ifndef SHARED_H
+#define SHARED_H
 
 #include <stdarg.h>
 #include <stdlib.h>
@@ -55,6 +55,7 @@ void *hc_bsearch_r (const void *key, const void *base, size_t nmemb, size_t size
 
 bool hc_path_is_file (const char *path);
 bool hc_path_is_directory (const char *path);
+bool hc_path_is_fifo (const char *path);
 bool hc_path_is_empty (const char *path);
 bool hc_path_exist (const char *path);
 bool hc_path_read (const char *path);
@@ -109,4 +110,4 @@ bool is_apple_silicon (void);
 
 char *file_to_buffer (const char *filename);
 
-#endif // _SHARED_H
+#endif // SHARED_H

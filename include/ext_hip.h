@@ -3,8 +3,8 @@
  * License.....: MIT
  */
 
-#ifndef _EXT_HIP_H
-#define _EXT_HIP_H
+#ifndef EXT_HIP_H
+#define EXT_HIP_H
 
 // The general Idea with HIP is to use it for AMD GPU since we use CUDA for NV
 // Therefore, we need to take certain items, such as hipDeviceptr_t from driver specific paths like amd_driver_types.h
@@ -262,6 +262,8 @@ typedef enum hipDeviceAttribute_t {
     hipDeviceAttributeUnifiedAddressing,                ///< Cuda only. An unified address space shared with the host.
     hipDeviceAttributeUuid,                             ///< Cuda only. Unique ID in 16 byte.
     hipDeviceAttributeWarpSize,                         ///< Warp size in threads.
+    hipDeviceAttributeMemoryPoolsSupported,             ///< Device supports HIP Stream Ordered Memory Allocator
+    hipDeviceAttributeVirtualMemoryManagementSupported, ///< Device supports HIP virtual memory management
 
     hipDeviceAttributeCudaCompatibleEnd = 9999,
     hipDeviceAttributeAmdSpecificBegin = 10000,
@@ -288,6 +290,9 @@ typedef enum hipDeviceAttribute_t {
     hipDeviceAttributeImageSupport,                             ///< '1' if Device supports image, '0' otherwise.
     hipDeviceAttributePhysicalMultiProcessorCount,              ///< All available physical compute
                                                                 ///< units for the device
+    hipDeviceAttributeFineGrainSupport,                         ///< '1' if Device supports fine grain, '0' otherwise
+    hipDeviceAttributeWallClockRate,                            ///< Constant frequency of wall clock in kilohertz.
+
     hipDeviceAttributeAmdSpecificEnd = 19999,
     hipDeviceAttributeVendorSpecificBegin = 20000,
     // Extended attributes for vendors
@@ -321,6 +326,7 @@ typedef enum hipDeviceAttribute_t {
  * non-coherent host memory visible to the host. The flag is a no-op on CUDA platforms.*/
 #define hipEventReleaseToSystem  0x80000000
 
+/** Automatically select between Spin and Yield.*/
 #define hipDeviceScheduleAuto 0x0
 
 /** Dedicate a CPU core to spin-wait. Provides lowest latency, but burns a CPU core and may
@@ -493,4 +499,4 @@ int hc_hipStreamCreate         (void *hashcat_ctx, hipStream_t *phStream, unsign
 int hc_hipStreamDestroy        (void *hashcat_ctx, hipStream_t hStream);
 int hc_hipStreamSynchronize    (void *hashcat_ctx, hipStream_t hStream);
 
-#endif // _EXT_HIP_H
+#endif // EXT_HIP_H
