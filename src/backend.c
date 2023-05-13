@@ -528,7 +528,7 @@ static bool opencl_test_instruction (hashcat_ctx_t *hashcat_ctx, cl_context cont
   return true;
 }
 
-static bool read_kernel_binary (hashcat_ctx_t *hashcat_ctx, const char *kernel_file, size_t *kernel_lengths, char **kernel_sources)
+bool read_kernel_binary (hashcat_ctx_t *hashcat_ctx, const char *kernel_file, size_t *kernel_lengths, char **kernel_sources)
 {
   HCFILE fp;
 
@@ -615,6 +615,11 @@ static bool write_kernel_binary (hashcat_ctx_t *hashcat_ctx, const char *kernel_
   }
 
   return true;
+}
+
+u32 backend_device_idx_real_from_virtual (const u32 device_idx, const u32 backend_devices_virtual)
+{
+  return device_idx / backend_devices_virtual;
 }
 
 void generate_source_kernel_filename (const bool slow_candidates, const u32 attack_exec, const u32 attack_kern, const u32 kern_type, const u32 opti_type, char *shared_dir, char *source_file)
@@ -4249,11 +4254,12 @@ int backend_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
   backend_ctx->enabled = false;
 
+  if (user_options->usage      > 0)    return 0;
+
   if (user_options->hash_info == true) return 0;
   if (user_options->keyspace  == true) return 0;
   if (user_options->left      == true) return 0;
   if (user_options->show      == true) return 0;
-  if (user_options->usage     == true) return 0;
   if (user_options->version   == true) return 0;
   if (user_options->identify  == true) return 0;
 
@@ -4390,6 +4396,21 @@ int backend_ctx_init (hashcat_ctx_t *hashcat_ctx)
       backend_ctx->rc_hiprtc_init = rc_hiprtc_init;
 
       hiprtc_close (hashcat_ctx);
+
+      #if defined (_WIN)
+      event_log_warning (hashcat_ctx, "Support for HIPRTC was dropped by AMD Adrenalin Edition 22.7.1 and later.");
+      event_log_warning (hashcat_ctx, "This is not a hashcat problem.");
+      event_log_warning (hashcat_ctx, NULL);
+      event_log_warning (hashcat_ctx, "For details please read: https://github.com/hashcat/hashcat/issues/3501");
+      event_log_warning (hashcat_ctx, NULL);
+      event_log_warning (hashcat_ctx, "In order to make HIP work, you have two options:");
+      event_log_warning (hashcat_ctx, "- Install AMD Adrenalin version 22.5.1 EXACTLY");
+      event_log_warning (hashcat_ctx, "- Read the details from the above link for other workarounds");
+      event_log_warning (hashcat_ctx, NULL);
+      event_log_warning (hashcat_ctx, "You can also just stick to OpenCL support.");
+      event_log_warning (hashcat_ctx, "To do this, just use --backend-ignore-hip option to ignore HIP.");
+      event_log_warning (hashcat_ctx, NULL);
+      #endif
     }
 
     /**
@@ -4840,6 +4861,13 @@ int backend_ctx_init (hashcat_ctx_t *hashcat_ctx)
           }
         }
 
+        opencl_platform_devices_cnt *= user_options->backend_devices_virtual;
+
+        for (int i = opencl_platform_devices_cnt - 1; i >= 0; i--)
+        {
+          opencl_platform_devices[i] = opencl_platform_devices[backend_device_idx_real_from_virtual (i, user_options->backend_devices_virtual)];
+        }
+
         opencl_platforms_devices[opencl_platforms_idx]     = opencl_platform_devices;
         opencl_platforms_devices_cnt[opencl_platforms_idx] = opencl_platform_devices_cnt;
       }
@@ -5010,6 +5038,8 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
       cuda_close (hashcat_ctx);
     }
 
+    cuda_devices_cnt *= user_options->backend_devices_virtual;
+
     backend_ctx->cuda_devices_cnt = cuda_devices_cnt;
 
     // device specific
@@ -5017,6 +5047,8 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
     for (int cuda_devices_idx = 0; cuda_devices_idx < cuda_devices_cnt; cuda_devices_idx++, backend_devices_idx++)
     {
       const u32 device_id = backend_devices_idx;
+
+      const u32 cuda_devices_idx_real = backend_device_idx_real_from_virtual (cuda_devices_idx, user_options->backend_devices_virtual);
 
       hc_device_param_t *device_param = &devices_param[backend_devices_idx];
 
@@ -5026,7 +5058,7 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
 
       CUdevice cuda_device;
 
-      if (hc_cuDeviceGet (hashcat_ctx, &cuda_device, cuda_devices_idx) == -1)
+      if (hc_cuDeviceGet (hashcat_ctx, &cuda_device, cuda_devices_idx_real) == -1)
       {
         device_param->skipped = true;
 
@@ -5417,6 +5449,8 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
       hip_close (hashcat_ctx);
     }
 
+    hip_devices_cnt *= user_options->backend_devices_virtual;
+
     backend_ctx->hip_devices_cnt = hip_devices_cnt;
 
     // device specific
@@ -5424,6 +5458,8 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
     for (int hip_devices_idx = 0; hip_devices_idx < hip_devices_cnt; hip_devices_idx++, backend_devices_idx++)
     {
       const u32 device_id = backend_devices_idx;
+
+      const u32 hip_devices_idx_real = backend_device_idx_real_from_virtual (hip_devices_idx, user_options->backend_devices_virtual);
 
       hc_device_param_t *device_param = &devices_param[backend_devices_idx];
 
@@ -5433,7 +5469,7 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
 
       hipDevice_t hip_device;
 
-      if (hc_hipDeviceGet (hashcat_ctx, &hip_device, hip_devices_idx) == -1)
+      if (hc_hipDeviceGet (hashcat_ctx, &hip_device, hip_devices_idx_real) == -1)
       {
         device_param->skipped = true;
 
@@ -5845,6 +5881,8 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
       mtl_close (hashcat_ctx);
     }
 
+    metal_devices_cnt *= user_options->backend_devices_virtual;
+
     backend_ctx->metal_devices_cnt = metal_devices_cnt;
 
     // device specific
@@ -5852,6 +5890,8 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
     for (int metal_devices_idx = 0; metal_devices_idx < metal_devices_cnt; metal_devices_idx++, backend_devices_idx++)
     {
       const u32 device_id = backend_devices_idx;
+
+      const u32 metal_devices_idx_real = backend_device_idx_real_from_virtual (metal_devices_idx, user_options->backend_devices_virtual);
 
       hc_device_param_t *device_param = &devices_param[backend_devices_idx];
 
@@ -5861,7 +5901,7 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
 
       mtl_device_id metal_device = NULL;
 
-      if (hc_mtlDeviceGet (hashcat_ctx, &metal_device, metal_devices_idx) == -1)
+      if (hc_mtlDeviceGet (hashcat_ctx, &metal_device, metal_devices_idx_real) == -1)
       {
         device_param->skipped = true;
 
@@ -6230,7 +6270,7 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
       {
         if (backend_ctx->backend_devices_filter == -1ULL)
         {
-          if (user_options->backend_info == 0)
+          if ((user_options->quiet == false) && (user_options->backend_info == 0))
           {
             event_log_warning (hashcat_ctx, "The device #%d has been disabled as it most likely also exists as an OpenCL device, but it is not possible to automatically map it.", device_id + 1);
             event_log_warning (hashcat_ctx, "You can use -d %d to use Metal API instead of OpenCL API. In some rare cases this is more stable.", device_id + 1);
@@ -6362,11 +6402,9 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
         // try CL_DEVICE_BOARD_NAME_AMD first, if it fails fall back to CL_DEVICE_NAME
         // since AMD ROCm does not identify itself at this stage we simply check for return code from clGetDeviceInfo()
 
-        #define CHECK_BOARD_NAME_AMD 1
-
         cl_int rc_board_name_amd = CL_INVALID_VALUE;
 
-        if (CHECK_BOARD_NAME_AMD)
+        if (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU)
         {
           //backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
@@ -7271,6 +7309,7 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
 
                   event_log_warning (hashcat_ctx, "* Device #%u: CUDA SDK Toolkit not installed or incorrectly installed.", device_id + 1);
                   event_log_warning (hashcat_ctx, "             CUDA SDK Toolkit required for proper device support and utilization.");
+                  event_log_warning (hashcat_ctx, "             For more information, see: https://hashcat.net/faq/wrongdriver");
                   event_log_warning (hashcat_ctx, "             Falling back to OpenCL runtime.");
 
                   event_log_warning (hashcat_ctx, NULL);
@@ -7853,6 +7892,7 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
 
         backend_ctx->opencl_devices_active--;
         backend_ctx->backend_devices_active--;
+
         continue;
       }
 
@@ -7868,6 +7908,7 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
 
         backend_ctx->opencl_devices_active--;
         backend_ctx->backend_devices_active--;
+
         continue;
       }
 
@@ -7963,94 +8004,97 @@ int backend_ctx_devices_init (hashcat_ctx_t *hashcat_ctx, const int comptime)
         */
       }
 
-      // available device memory
+        // available device memory
       // This test causes an GPU memory usage spike.
       // In case there are multiple hashcat instances starting at the same time this will cause GPU out of memory errors which otherwise would not exist.
       // We will simply not run it if that device was skipped by the user.
 
-      #define MAX_ALLOC_CHECKS_CNT  8192
-      #define MAX_ALLOC_CHECKS_SIZE (64 * 1024 * 1024)
-
-      device_param->device_available_mem = device_param->device_global_mem - MAX_ALLOC_CHECKS_SIZE;
-
-      if (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU)
+      if (device_param->device_global_mem)
       {
-        // OK, so the problem here is the following:
-        // There's just CL_DEVICE_GLOBAL_MEM_SIZE to ask OpenCL about the total memory on the device,
-        // but there's no way to ask for available memory on the device.
-        // In combination, most OpenCL runtimes implementation of clCreateBuffer()
-        // are doing so called lazy memory allocation on the device.
-        // Now, if the user has X11 (or a game or anything that takes a lot of GPU memory)
-        // running on the host we end up with an error type of this:
-        // clEnqueueNDRangeKernel(): CL_MEM_OBJECT_ALLOCATION_FAILURE
-        // The clEnqueueNDRangeKernel() is because of the lazy allocation
-        // The best way to workaround this problem is if we would be able to ask for available memory,
-        // The idea here is to try to evaluate available memory by allocating it till it errors
+        #define MAX_ALLOC_CHECKS_CNT  8192
+        #define MAX_ALLOC_CHECKS_SIZE (64 * 1024 * 1024)
 
-        cl_mem *tmp_device = (cl_mem *) hccalloc (MAX_ALLOC_CHECKS_CNT, sizeof (cl_mem));
+        device_param->device_available_mem = device_param->device_global_mem - MAX_ALLOC_CHECKS_SIZE;
 
-        u64 c;
-
-        for (c = 0; c < MAX_ALLOC_CHECKS_CNT; c++)
+        if (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU)
         {
-          if (((c + 1 + 1) * MAX_ALLOC_CHECKS_SIZE) >= device_param->device_global_mem) break;
+          // OK, so the problem here is the following:
+          // There's just CL_DEVICE_GLOBAL_MEM_SIZE to ask OpenCL about the total memory on the device,
+          // but there's no way to ask for available memory on the device.
+          // In combination, most OpenCL runtimes implementation of clCreateBuffer()
+          // are doing so called lazy memory allocation on the device.
+          // Now, if the user has X11 (or a game or anything that takes a lot of GPU memory)
+          // running on the host we end up with an error type of this:
+          // clEnqueueNDRangeKernel(): CL_MEM_OBJECT_ALLOCATION_FAILURE
+          // The clEnqueueNDRangeKernel() is because of the lazy allocation
+          // The best way to workaround this problem is if we would be able to ask for available memory,
+          // The idea here is to try to evaluate available memory by allocating it till it errors
 
-          // work around, for some reason apple opencl can't have buffers larger 2^31
-          // typically runs into trap 6
-          // maybe 32/64 bit problem affecting size_t?
-          // this seems to affect global memory as well no just single allocations
+          cl_mem *tmp_device = (cl_mem *) hccalloc (MAX_ALLOC_CHECKS_CNT, sizeof (cl_mem));
 
-          if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->is_metal == false))
+          u64 c;
+
+          for (c = 0; c < MAX_ALLOC_CHECKS_CNT; c++)
           {
-            const size_t undocumented_single_allocation_apple = 0x7fffffff;
+            if (((c + 1 + 1) * MAX_ALLOC_CHECKS_SIZE) >= device_param->device_global_mem) break;
 
-            if (((c + 1 + 1) * MAX_ALLOC_CHECKS_SIZE) >= undocumented_single_allocation_apple) break;
+            // work around, for some reason apple opencl can't have buffers larger 2^31
+            // typically runs into trap 6
+            // maybe 32/64 bit problem affecting size_t?
+            // this seems to affect global memory as well no just single allocations
+
+            if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->is_metal == false))
+            {
+              const size_t undocumented_single_allocation_apple = 0x7fffffff;
+
+              if (((c + 1 + 1) * MAX_ALLOC_CHECKS_SIZE) >= undocumented_single_allocation_apple) break;
+            }
+
+            cl_int CL_err;
+
+            OCL_PTR *ocl = (OCL_PTR *) backend_ctx->ocl;
+
+            tmp_device[c] = ocl->clCreateBuffer (context, CL_MEM_READ_WRITE, MAX_ALLOC_CHECKS_SIZE, NULL, &CL_err);
+
+            if (CL_err != CL_SUCCESS)
+            {
+              c--;
+
+              break;
+            }
+
+            // transfer only a few byte should be enough to force the runtime to actually allocate the memory
+
+            u8 tmp_host[8];
+
+            if (ocl->clEnqueueReadBuffer  (command_queue, tmp_device[c], CL_TRUE, 0, sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
+            if (ocl->clEnqueueWriteBuffer (command_queue, tmp_device[c], CL_TRUE, 0, sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
+
+            if (ocl->clEnqueueReadBuffer  (command_queue, tmp_device[c], CL_TRUE, MAX_ALLOC_CHECKS_SIZE - sizeof (tmp_host), sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
+            if (ocl->clEnqueueWriteBuffer (command_queue, tmp_device[c], CL_TRUE, MAX_ALLOC_CHECKS_SIZE - sizeof (tmp_host), sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
           }
 
-          cl_int CL_err;
+          device_param->device_available_mem = MAX_ALLOC_CHECKS_SIZE;
 
-          OCL_PTR *ocl = (OCL_PTR *) backend_ctx->ocl;
-
-          tmp_device[c] = ocl->clCreateBuffer (context, CL_MEM_READ_WRITE, MAX_ALLOC_CHECKS_SIZE, NULL, &CL_err);
-
-          if (CL_err != CL_SUCCESS)
+          if (c > 0)
           {
-            c--;
-
-            break;
+            device_param->device_available_mem *= c;
           }
 
-          // transfer only a few byte should be enough to force the runtime to actually allocate the memory
+          // clean up
 
-          u8 tmp_host[8];
-
-          if (ocl->clEnqueueReadBuffer  (command_queue, tmp_device[c], CL_TRUE, 0, sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
-          if (ocl->clEnqueueWriteBuffer (command_queue, tmp_device[c], CL_TRUE, 0, sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
-
-          if (ocl->clEnqueueReadBuffer  (command_queue, tmp_device[c], CL_TRUE, MAX_ALLOC_CHECKS_SIZE - sizeof (tmp_host), sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
-          if (ocl->clEnqueueWriteBuffer (command_queue, tmp_device[c], CL_TRUE, MAX_ALLOC_CHECKS_SIZE - sizeof (tmp_host), sizeof (tmp_host), tmp_host, 0, NULL, NULL) != CL_SUCCESS) break;
-        }
-
-        device_param->device_available_mem = MAX_ALLOC_CHECKS_SIZE;
-
-        if (c > 0)
-        {
-          device_param->device_available_mem *= c;
-        }
-
-        // clean up
-
-        for (c = 0; c < MAX_ALLOC_CHECKS_CNT; c++)
-        {
-          if (((c + 1 + 1) * MAX_ALLOC_CHECKS_SIZE) >= device_param->device_global_mem) break;
-
-          if (tmp_device[c] != NULL)
+          for (c = 0; c < MAX_ALLOC_CHECKS_CNT; c++)
           {
-            if (hc_clReleaseMemObject (hashcat_ctx, tmp_device[c]) == -1) return -1;
-          }
-        }
+            if (((c + 1 + 1) * MAX_ALLOC_CHECKS_SIZE) >= device_param->device_global_mem) break;
 
-        hcfree (tmp_device);
+            if (tmp_device[c] != NULL)
+            {
+              if (hc_clReleaseMemObject (hashcat_ctx, tmp_device[c]) == -1) return -1;
+            }
+          }
+
+          hcfree (tmp_device);
+        }
       }
 
       hc_clReleaseCommandQueue (hashcat_ctx, command_queue);

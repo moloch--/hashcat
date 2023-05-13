@@ -22,8 +22,7 @@ static const char *HASH_NAME      = "Terra Station Wallet (AES256-CBC(PBKDF2($pa
 static const u64   KERN_TYPE      = 29600;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
-                                  | OPTS_TYPE_ST_HEX
-                                  | OPTS_TYPE_PT_GENERATE_BE;
+                                  | OPTS_TYPE_ST_HEX;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "hashcat";
 static const char *ST_HASH        = "67445496c838e96c1424a8dae4b146f0fc247c8c34ef33feffeb1e4412018512wZGtBMeN84XZE2LoOKwTGvA4Ee4m7PR1lDGIdWUV6OSUZKRiKFx9tlrnZLt8r8OfOzbwUS2a2Uo+nrrP6F85fh4eHstwPJw0KwzHWB8br58=";
@@ -103,10 +102,13 @@ u32 module_salt_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED c
 
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)
 {
-  terra_t *terra = (terra_t *) esalt_buf;
   u32 *digest = (u32 *) digest_buf;
 
+  terra_t *terra = (terra_t *) esalt_buf;
+
   hc_token_t token;
+
+  memset (&token, 0, sizeof (hc_token_t));
 
   token.token_cnt  = 3;
 
@@ -195,9 +197,9 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
 int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const void *digest_buf, MAYBE_UNUSED const salt_t *salt, MAYBE_UNUSED const void *esalt_buf, MAYBE_UNUSED const void *hook_salt_buf, MAYBE_UNUSED const hashinfo_t *hash_info, char *line_buf, MAYBE_UNUSED const int line_size)
 {
-  terra_t *terra = (terra_t *) esalt_buf;
-
   u32 *digest = (u32 *) digest_buf;
+
+  const terra_t *terra = (const terra_t *) esalt_buf;
 
   // salt:
 
