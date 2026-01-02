@@ -22,6 +22,7 @@ static const u32   HASH_CATEGORY  = HASH_CATEGORY_FDE;
 static const char *HASH_NAME      = "VirtualBox (PBKDF2-HMAC-SHA256 & AES-256-XTS)";
 static const u64   KERN_TYPE      = 27600;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
+                                  | OPTI_TYPE_REGISTER_LIMIT
                                   | OPTI_TYPE_SLOW_HASH_SIMD_LOOP
                                   | OPTI_TYPE_SLOW_HASH_SIMD_LOOP2;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
@@ -94,16 +95,6 @@ u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED c
   const u64 tmp_size = (const u64) sizeof (pbkdf2_sha256_tmp_t);
 
   return tmp_size;
-}
-
-u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  // this overrides the reductions of PW_MAX in case optimized kernel is selected
-  // IOW, even in optimized kernel mode it support length 256
-
-  const u32 pw_max = PW_MAX;
-
-  return pw_max;
 }
 
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)
@@ -184,14 +175,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   u32 *salt1_buf_ptr = (u32 *) vbox->salt1_buf;
 
-  salt1_buf_ptr[0] = hex_to_u32 ((const u8 *) &salt1_pos[ 0]);
-  salt1_buf_ptr[1] = hex_to_u32 ((const u8 *) &salt1_pos[ 8]);
-  salt1_buf_ptr[2] = hex_to_u32 ((const u8 *) &salt1_pos[16]);
-  salt1_buf_ptr[3] = hex_to_u32 ((const u8 *) &salt1_pos[24]);
-  salt1_buf_ptr[4] = hex_to_u32 ((const u8 *) &salt1_pos[32]);
-  salt1_buf_ptr[5] = hex_to_u32 ((const u8 *) &salt1_pos[40]);
-  salt1_buf_ptr[6] = hex_to_u32 ((const u8 *) &salt1_pos[48]);
-  salt1_buf_ptr[7] = hex_to_u32 ((const u8 *) &salt1_pos[56]);
+  salt1_buf_ptr[0] = hex_to_u32 (&salt1_pos[ 0]);
+  salt1_buf_ptr[1] = hex_to_u32 (&salt1_pos[ 8]);
+  salt1_buf_ptr[2] = hex_to_u32 (&salt1_pos[16]);
+  salt1_buf_ptr[3] = hex_to_u32 (&salt1_pos[24]);
+  salt1_buf_ptr[4] = hex_to_u32 (&salt1_pos[32]);
+  salt1_buf_ptr[5] = hex_to_u32 (&salt1_pos[40]);
+  salt1_buf_ptr[6] = hex_to_u32 (&salt1_pos[48]);
+  salt1_buf_ptr[7] = hex_to_u32 (&salt1_pos[56]);
 
   vbox->salt1_len = salt1_len / 2;
 
@@ -228,22 +219,22 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   u32 *enc_pass_buf_ptr = (u32 *) vbox->enc_pass_buf;
 
-  enc_pass_buf_ptr[ 0] = hex_to_u32 ((const u8 *) &enc_pass_pos[ 0]);
-  enc_pass_buf_ptr[ 1] = hex_to_u32 ((const u8 *) &enc_pass_pos[ 8]);
-  enc_pass_buf_ptr[ 2] = hex_to_u32 ((const u8 *) &enc_pass_pos[16]);
-  enc_pass_buf_ptr[ 3] = hex_to_u32 ((const u8 *) &enc_pass_pos[24]);
-  enc_pass_buf_ptr[ 4] = hex_to_u32 ((const u8 *) &enc_pass_pos[32]);
-  enc_pass_buf_ptr[ 5] = hex_to_u32 ((const u8 *) &enc_pass_pos[40]);
-  enc_pass_buf_ptr[ 6] = hex_to_u32 ((const u8 *) &enc_pass_pos[48]);
-  enc_pass_buf_ptr[ 7] = hex_to_u32 ((const u8 *) &enc_pass_pos[56]);
-  enc_pass_buf_ptr[ 8] = hex_to_u32 ((const u8 *) &enc_pass_pos[64]);
-  enc_pass_buf_ptr[ 9] = hex_to_u32 ((const u8 *) &enc_pass_pos[72]);
-  enc_pass_buf_ptr[10] = hex_to_u32 ((const u8 *) &enc_pass_pos[80]);
-  enc_pass_buf_ptr[11] = hex_to_u32 ((const u8 *) &enc_pass_pos[88]);
-  enc_pass_buf_ptr[12] = hex_to_u32 ((const u8 *) &enc_pass_pos[96]);
-  enc_pass_buf_ptr[13] = hex_to_u32 ((const u8 *) &enc_pass_pos[104]);
-  enc_pass_buf_ptr[14] = hex_to_u32 ((const u8 *) &enc_pass_pos[112]);
-  enc_pass_buf_ptr[15] = hex_to_u32 ((const u8 *) &enc_pass_pos[120]);
+  enc_pass_buf_ptr[ 0] = hex_to_u32 (&enc_pass_pos[ 0]);
+  enc_pass_buf_ptr[ 1] = hex_to_u32 (&enc_pass_pos[ 8]);
+  enc_pass_buf_ptr[ 2] = hex_to_u32 (&enc_pass_pos[16]);
+  enc_pass_buf_ptr[ 3] = hex_to_u32 (&enc_pass_pos[24]);
+  enc_pass_buf_ptr[ 4] = hex_to_u32 (&enc_pass_pos[32]);
+  enc_pass_buf_ptr[ 5] = hex_to_u32 (&enc_pass_pos[40]);
+  enc_pass_buf_ptr[ 6] = hex_to_u32 (&enc_pass_pos[48]);
+  enc_pass_buf_ptr[ 7] = hex_to_u32 (&enc_pass_pos[56]);
+  enc_pass_buf_ptr[ 8] = hex_to_u32 (&enc_pass_pos[64]);
+  enc_pass_buf_ptr[ 9] = hex_to_u32 (&enc_pass_pos[72]);
+  enc_pass_buf_ptr[10] = hex_to_u32 (&enc_pass_pos[80]);
+  enc_pass_buf_ptr[11] = hex_to_u32 (&enc_pass_pos[88]);
+  enc_pass_buf_ptr[12] = hex_to_u32 (&enc_pass_pos[96]);
+  enc_pass_buf_ptr[13] = hex_to_u32 (&enc_pass_pos[104]);
+  enc_pass_buf_ptr[14] = hex_to_u32 (&enc_pass_pos[112]);
+  enc_pass_buf_ptr[15] = hex_to_u32 (&enc_pass_pos[120]);
 
   // iter 2
 
@@ -262,14 +253,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   u32 *salt2_buf_ptr = (u32 *) vbox->salt2_buf;
 
-  salt2_buf_ptr[0] = hex_to_u32 ((const u8 *) &salt2_pos[ 0]);
-  salt2_buf_ptr[1] = hex_to_u32 ((const u8 *) &salt2_pos[ 8]);
-  salt2_buf_ptr[2] = hex_to_u32 ((const u8 *) &salt2_pos[16]);
-  salt2_buf_ptr[3] = hex_to_u32 ((const u8 *) &salt2_pos[24]);
-  salt2_buf_ptr[4] = hex_to_u32 ((const u8 *) &salt2_pos[32]);
-  salt2_buf_ptr[5] = hex_to_u32 ((const u8 *) &salt2_pos[40]);
-  salt2_buf_ptr[6] = hex_to_u32 ((const u8 *) &salt2_pos[48]);
-  salt2_buf_ptr[7] = hex_to_u32 ((const u8 *) &salt2_pos[56]);
+  salt2_buf_ptr[0] = hex_to_u32 (&salt2_pos[ 0]);
+  salt2_buf_ptr[1] = hex_to_u32 (&salt2_pos[ 8]);
+  salt2_buf_ptr[2] = hex_to_u32 (&salt2_pos[16]);
+  salt2_buf_ptr[3] = hex_to_u32 (&salt2_pos[24]);
+  salt2_buf_ptr[4] = hex_to_u32 (&salt2_pos[32]);
+  salt2_buf_ptr[5] = hex_to_u32 (&salt2_pos[40]);
+  salt2_buf_ptr[6] = hex_to_u32 (&salt2_pos[48]);
+  salt2_buf_ptr[7] = hex_to_u32 (&salt2_pos[56]);
 
   vbox->salt2_len = salt2_len / 2;
 
@@ -277,14 +268,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *hash_pos = token.buf[7];
 
-  digest[0] = hex_to_u32 ((const u8 *) &hash_pos[ 0]);
-  digest[1] = hex_to_u32 ((const u8 *) &hash_pos[ 8]);
-  digest[2] = hex_to_u32 ((const u8 *) &hash_pos[16]);
-  digest[3] = hex_to_u32 ((const u8 *) &hash_pos[24]);
-  digest[4] = hex_to_u32 ((const u8 *) &hash_pos[32]);
-  digest[5] = hex_to_u32 ((const u8 *) &hash_pos[40]);
-  digest[6] = hex_to_u32 ((const u8 *) &hash_pos[48]);
-  digest[7] = hex_to_u32 ((const u8 *) &hash_pos[56]);
+  digest[0] = hex_to_u32 (&hash_pos[ 0]);
+  digest[1] = hex_to_u32 (&hash_pos[ 8]);
+  digest[2] = hex_to_u32 (&hash_pos[16]);
+  digest[3] = hex_to_u32 (&hash_pos[24]);
+  digest[4] = hex_to_u32 (&hash_pos[32]);
+  digest[5] = hex_to_u32 (&hash_pos[40]);
+  digest[6] = hex_to_u32 (&hash_pos[48]);
+  digest[7] = hex_to_u32 (&hash_pos[56]);
 
   digest[0] = byte_swap_32 (digest[0]);
   digest[1] = byte_swap_32 (digest[1]);
@@ -380,6 +371,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = module_benchmark_salt;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -436,7 +429,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;
-  module_ctx->module_pw_max                   = module_pw_max;
+  module_ctx->module_pw_max                   = MODULE_DEFAULT;
   module_ctx->module_pw_min                   = MODULE_DEFAULT;
   module_ctx->module_salt_max                 = MODULE_DEFAULT;
   module_ctx->module_salt_min                 = MODULE_DEFAULT;

@@ -86,7 +86,7 @@ sub module_generate_hash
 
   my $key = $pbkdf2->PBKDF2_hex ($salt_bin, $word);
 
-  my $verify_bytes = substr ($key, -4); $verify_bytes =~ s/^0+//; #lol
+  my $verify_bytes = substr ($key, -4); #$verify_bytes =~ s/^0+//; #lol
 
   $key = substr ($key, $key_len, $key_len);
 

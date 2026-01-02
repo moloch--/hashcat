@@ -5,23 +5,33 @@
 
 SHARED                  ?= 0
 DEBUG                   := 0
-PRODUCTION              := 1
-PRODUCTION_VERSION      := v6.2.6
+PRODUCTION              := 0
+PRODUCTION_VERSION      := v7.1.2
+MACOS_UNIVERSAL_BINARY  ?= 0
+ENABLE_LTO              ?= 1
 ENABLE_CUBIN            ?= 1
 ENABLE_BRAIN            ?= 1
 ENABLE_UNRAR            ?= 1
+USE_MOLD                ?= 0
 USE_SYSTEM_LZMA         ?= 0
 USE_SYSTEM_ZLIB         ?= 0
 USE_SYSTEM_OPENCL       ?= 0
 USE_SYSTEM_XXHASH       ?= 0
 ## do not change, requires some hacks
 USE_SYSTEM_UNRAR        ?= 0
+MAINTAINER_MODE         ?= 0
 
 ##
 ## Detect Operating System
 ##
 
 UNAME                   := $(shell uname -s)
+
+# Detect Android
+ANDROID_DETECT := $(findstring Android,$(shell uname -a))
+ifneq (,$(ANDROID_DETECT))
+  UNAME                   := Android
+endif
 
 # we need to strip the windows version number to be able to build hashcat on cygwin hosts
 UNAME                   := $(patsubst CYGWIN_NT-%,CYGWIN,$(UNAME))
@@ -31,12 +41,42 @@ UNAME                   := $(patsubst MSYS_NT-%,MSYS2,$(UNAME))
 UNAME                   := $(patsubst MINGW32_NT-%,MSYS2,$(UNAME))
 UNAME                   := $(patsubst MINGW64_NT-%,MSYS2,$(UNAME))
 
-ifeq (,$(filter $(UNAME),Linux FreeBSD NetBSD Darwin CYGWIN MSYS2))
+ifeq (,$(filter $(UNAME),Android Linux OpenBSD FreeBSD NetBSD DragonFly Darwin CYGWIN MSYS2))
 $(error "! Your Operating System ($(UNAME)) is not supported by this Makefile")
+endif
+
+# force disable LTO if DEBUG > 0
+ifeq ($(shell [ $(DEBUG) -gt 0 ] && echo true),true)
+override ENABLE_LTO := 0
+endif
+
+# force disable LTO if MACOS_UNIVERSAL_BINARY == 1
+ifeq ($(UNAME),Darwin)
+ifeq ($(MACOS_UNIVERSAL_BINARY),1)
+override ENABLE_LTO := 0
+endif
+endif
+
+BUILD_MODE := native
+
+ifneq ($(filter binaries linux host_linux modules_linux bridges_linux feeds_linux win host_win modules_win bridges_win feeds_win,$(MAKECMDGOALS)),)
+BUILD_MODE := cross
+endif
+
+# force disable LTO if we are in native build and CC == clang and OS is MSYS2 or NetBSD or DragonFly
+ifeq ($(BUILD_MODE),native)
+ifeq ($(CC),clang)
+ifneq (,$(filter MSYS2 NetBSD DragonFly,$(UNAME)))
+override ENABLE_LTO := 0
+endif
+endif
 endif
 
 ifeq ($(DEBUG),1)
 $(info "## Detected Operating System : $(UNAME)")
+$(info "## Detected Build Mode : $(BUILD_MODE)")
+$(info "## Detected CC : $(CC)")
+$(info "## Detected CXX : $(CXX)")
 endif
 
 ##
@@ -54,6 +94,8 @@ endif
 ##
 
 MODULE_INTERFACE_VERSION := 700
+BRIDGE_INTERFACE_VERSION := 700
+FEEDS_INTERFACE_VERSION  := 713
 
 ##
 ## Native compiler paths
@@ -68,21 +110,34 @@ RM                      := rm
 SED                     := sed
 SED_IN_PLACE            := -i
 
+IS_APPLE_SILICON        := 0
+
 ifeq ($(UNAME),Darwin)
 CC                      := clang
 CXX                     := clang++
+# if available using llvm-ar else ar
+AR                      := $(shell which llvm-ar >/dev/null 2>&1 && echo llvm-ar || echo ar)
 # the sed -i option of macOS requires a parameter for the backup file (we just use "")
-AR                      := /usr/bin/ar
 SED                     := /usr/bin/sed
 SED_IN_PLACE            := -i ""
 DARWIN_VERSION          := $(shell uname -r | cut -d. -f1)
-IS_APPLE_SILICON        := $(shell lipo /bin/zsh -verify_arch arm64e && echo 1 || echo 0)
+IS_APPLE_SILICON        := $(shell [ "$$(sysctl -in hw.optional.arm64 2>/dev/null)" = "1" ] && echo 1 || echo 0)
 endif
 
-ifneq (,$(filter $(UNAME),FreeBSD NetBSD))
+IS_AARCH64              := $(shell [ "$$(arch 2>/dev/null)" = "aarch64" ] && echo 1 || echo 0)
+IS_ARM                  := $(or $(filter 1,$(IS_APPLE_SILICON)),$(filter 1,$(IS_AARCH64)))
+IS_PPC                  := $(shell uname -m | grep -q -E '^(ppc|powerpc)' && echo 1 || echo 0)
+
+ifneq (,$(filter $(UNAME),OpenBSD FreeBSD NetBSD DragonFly))
 CC                      := cc
 CXX                     := c++
 SED                     := gsed
+endif
+
+ifeq ($(UNAME),NetBSD)
+CC                      := gcc
+CXX                     := g++
+AR                      := gcc-ar
 endif
 
 ##
@@ -148,6 +203,8 @@ DEPS_UNRAR_PATH         := $(LIBRARY_DEV_ROOT_FOLDER)
 endif
 endif
 
+DEPS_SSE2NEON           := deps/sse2neon
+
 ##
 ## Filenames for library and frontend
 ##
@@ -179,7 +236,63 @@ COMPTIME                := $(shell date +%s)
 ## General compiler and linker options
 ##
 
-LFLAGS := $(LFLAGS)
+CC_NATIVE_CLANG         := 0
+
+ifneq (,$(findstring clang, $(CC)))
+CC_NATIVE_CLANG         := 1
+endif
+
+# force disable LTO if MSYS2 and CC is clang
+ifeq ($(UNAME),MSYS2)
+ifeq ($(CC_NATIVE_CLANG),1)
+override ENABLE_LTO     := 0
+endif
+endif
+
+CFLAGS                  := $(CFLAGS)
+LFLAGS                  := $(LDFLAGS)
+
+ifeq ($(DEBUG),1)
+CFLAGS                  += -fstack-usage
+endif
+
+ifeq ($(ENABLE_LTO),1)
+CFLAGS                  += -flto=auto
+ifeq ($(CC_NATIVE_CLANG),1)
+CFLAGS                  += -Wno-unknown-warning-option
+endif
+LFLAGS                  += -flto=auto
+ifeq ($(filter FreeBSD OpenBSD,$(UNAME)),)
+LFLAGS                  += -Wno-lto-type-mismatch
+endif
+endif
+
+ifeq ($(BUILD_MODE),native)
+ifneq ($(UNAME),Darwin)
+ifeq ($(USE_MOLD),1)
+LFLAGS                  += -fuse-ld=mold
+endif
+endif
+endif
+
+ifeq ($(MAINTAINER_MODE),0)
+ifeq ($(BUILD_MODE),native)
+ifneq ($(UNAME),Darwin)
+ifeq ($(IS_PPC),1)
+CFLAGS                  += -mcpu=native
+CFLAGS                  += -mtune=native
+else
+CFLAGS                  += -march=native
+CFLAGS                  += -mtune=native
+endif
+else
+ifeq ($(MACOS_UNIVERSAL_BINARY),0)
+CFLAGS                  += -march=native
+CFLAGS                  += -mtune=native
+endif
+endif
+endif
+endif
 
 ifeq ($(PRODUCTION),0)
 CFLAGS                  += -W
@@ -188,15 +301,13 @@ CFLAGS                  += -Wextra
 endif
 
 ## because LZMA SDK
-ifeq ($(CC),clang)
-#No longer supported in clang 10.0.0
-#CFLAGS                  += -Wno-enum-conversion
+ifeq ($(or $(filter 1,$(CC_NATIVE_CLANG)),$(filter cc,$(CC))),1)
 CFLAGS                  += -Wno-typedef-redefinition
 endif
 
 ifeq ($(USE_SYSTEM_LZMA),0)
 CFLAGS_LZMA             += -D_7ZIP_ST
-ifneq ($(CC),clang)
+ifeq ($(CC_NATIVE_CLANG),0)
 CFLAGS_LZMA             += -Wno-misleading-indentation
 endif
 endif
@@ -208,15 +319,31 @@ CFLAGS_ZLIB             += -Wno-implicit-function-declaration
 CFLAGS_ZLIB             += -Wno-unused-parameter
 CFLAGS_ZLIB             += -DIOAPI_NO_64
 CFLAGS_ZLIB             += -DUNZ_BUFSIZE=262144
+ifeq ($(CC_NATIVE_CLANG),1)
+CFLAGS_ZLIB             += -Wno-deprecated-non-prototype -Wno-unknown-warning-option
+endif
 endif
 
 ## because UNRAR
 ifeq ($(ENABLE_UNRAR),1)
 ifeq ($(USE_SYSTEM_UNRAR),0)
-ifneq ($(CC),clang)
+ifeq ($(UNAME),Darwin)
+CFLAGS_UNRAR            += -std=c++14
+endif
+ifeq ($(CC_NATIVE_CLANG),0)
+ifeq ($(filter FreeBSD OpenBSD,$(UNAME)),)
 CFLAGS_UNRAR            += -Wno-class-memaccess
+endif
 CFLAGS_UNRAR            += -Wno-misleading-indentation
+ifneq ($(UNAME),OpenBSD)
 CFLAGS_UNRAR            += -Wno-format-overflow
+endif
+else
+ifeq ($(IS_APPLE_SILICON),0)
+ifneq ($(filter $(UNAME),FreeBSD OpenBSD NetBSD DragonFly),$(UNAME))
+CFLAGS_UNRAR            += -Wno-nontrivial-memcall
+endif
+endif
 endif
 CFLAGS_UNRAR            += -Wno-missing-braces
 CFLAGS_UNRAR            += -Wno-unused-variable
@@ -240,9 +367,14 @@ endif
 endif
 
 ifeq ($(DEBUG),0)
-CFLAGS                  += -O2
+CFLAGS                  += -O2 -fomit-frame-pointer
 ifneq ($(UNAME),Darwin)
+ifeq ($(and $(filter MSYS2,$(UNAME)),$(filter 1,$(CC_NATIVE_CLANG))),)
+CFLAGS                  += -fno-plt
+endif
+ifeq ($(and $(filter DragonFly,$(UNAME)),$(filter 1,$(CC_NATIVE_CLANG))),)
 LFLAGS                  += -s
+endif
 endif
 else
 ifeq ($(DEBUG),1)
@@ -288,13 +420,15 @@ endif
 # OpenCL
 CFLAGS                  += -I$(DEPS_OPENCL_PATH)
 
-# brain and xxHash
+# brain
 ifeq ($(ENABLE_BRAIN),1)
 CFLAGS                  += -DWITH_BRAIN
+endif
+
+# xxHash
 CFLAGS                  += -I$(DEPS_XXHASH_PATH)
 ifeq ($(USE_SYSTEM_XXHASH),1)
 LFLAGS                  += -lxxhash
-endif
 endif
 
 # CUDA binary cache
@@ -305,14 +439,39 @@ endif
 # unrar
 ifeq ($(ENABLE_UNRAR),1)
 CFLAGS                  += -I$(DEPS_UNRAR_PATH)
+ifeq ($(UNAME),OpenBSD)
+LFLAGS                  += -lc++
+else
+ifeq ($(UNAME),Darwin)
 LFLAGS                  += -lstdc++
+else
+ifeq ($(UNAME),MSYS2)
+LFLAGS                  += -lstdc++
+else
+ifeq ($(UNAME),Linux)
+LFLAGS                  += -lstdc++
+endif
+endif
+endif
+endif
 endif
 
 ##
 ## Native compilation target
 ##
 
-ifeq ($(UNAME),Linux)
+ifeq ($(UNAME),Android)
+CFLAGS_NATIVE           := $(CFLAGS)
+CFLAGS_NATIVE           += -D__ANDROID__
+LFLAGS_NATIVE           := $(LFLAGS)
+LFLAGS_NATIVE           += -lpthread
+LFLAGS_NATIVE           += -ldl
+LFLAGS_NATIVE           += -lrt
+LFLAGS_NATIVE           += -lm
+LFLAGS_NATIVE           += -liconv
+LFLAGS_NATIVE           += -L$(PREFIX)/lib
+$(info Android environment detected.)
+else ifeq ($(UNAME),Linux)
 CFLAGS_NATIVE           := $(CFLAGS)
 CFLAGS_NATIVE           += -DWITH_HWMON
 LFLAGS_NATIVE           := $(LFLAGS)
@@ -322,24 +481,43 @@ LFLAGS_NATIVE           += -lrt
 LFLAGS_NATIVE           += -lm
 endif # Linux
 
-ifeq ($(UNAME),FreeBSD)
+ifneq (,$(filter $(UNAME),FreeBSD DragonFly))
 ifndef PORTNAME
 CFLAGS_NATIVE           := $(CFLAGS)
 LFLAGS_NATIVE           := $(LFLAGS)
+LFLAGS_NATIVE           += -L /usr/local/lib
 LFLAGS_NATIVE           += -lpthread
 LFLAGS_NATIVE           += -lm
 LFLAGS_NATIVE           += -liconv
 endif
 endif # FreeBSD
 
+ifeq ($(UNAME),OpenBSD)
+ifndef PORTNAME
+CFLAGS_NATIVE           := $(CFLAGS)
+#CFLAGS_NATIVE           += -I /ram/usr/local/include
+CFLAGS_NATIVE           += -I /usr/local/include
+LFLAGS_NATIVE           := $(LFLAGS)
+#LFLAGS_NATIVE           += -L /ram/usr/local/lib
+LFLAGS_NATIVE           += -L /usr/local/lib
+LFLAGS_NATIVE           += -lpthread
+LFLAGS_NATIVE           += -lm
+LFLAGS_NATIVE           += -liconv
+endif
+endif # OpenBSD
+
 ifeq ($(UNAME),NetBSD)
 CFLAGS_NATIVE           := $(CFLAGS)
+CFLAGS_NATIVE           += -I /usr/pkg/include
 LFLAGS_NATIVE           := $(LFLAGS)
+LFLAGS_NATIVE           += -L /usr/pkg/lib
 LFLAGS_NATIVE           += -lpthread
+LFLAGS_NATIVE           += -lm
+LFLAGS_NATIVE           += -liconv
 endif # NetBSD
 
 ifeq ($(UNAME),Darwin)
-export MACOSX_DEPLOYMENT_TARGET=10.15
+export MACOSX_DEPLOYMENT_TARGET=15.0
 CFLAGS_NATIVE           := $(CFLAGS)
 CFLAGS_NATIVE           += -DWITH_HWMON
 
@@ -353,9 +531,11 @@ LFLAGS_NATIVE           += -framework CoreGraphics
 LFLAGS_NATIVE           += -framework Foundation
 LFLAGS_NATIVE           += -framework IOKit
 LFLAGS_NATIVE           += -framework Metal
+LFLAGS_NATIVE           += -lIOReport
 LFLAGS_NATIVE           += -lpthread
 LFLAGS_NATIVE           += -liconv
 
+ifeq ($(MACOS_UNIVERSAL_BINARY),1)
 ifeq ($(IS_APPLE_SILICON),1)
 CFLAGS_NATIVE           += -arch arm64
 CFLAGS_NATIVE           += -arch x86_64
@@ -364,8 +544,14 @@ LFLAGS_NATIVE           += -arch arm64
 LFLAGS_NATIVE           += -arch x86_64
 endif
 endif
+endif
 
 endif # Darwin
+
+ifeq ($(IS_ARM),1)
+CFLAGS_NATIVE           += -DSSE2NEON_SUPPRESS_WARNINGS
+CFLAGS_NATIVE           += -I$(DEPS_SSE2NEON)
+endif
 
 ifeq ($(UNAME),CYGWIN)
 CFLAGS_NATIVE           := $(CFLAGS)
@@ -400,16 +586,12 @@ CXXFLAGS                :=
 ##
 
 EMU_OBJS_ALL            := emu_general emu_inc_common emu_inc_platform emu_inc_scalar emu_inc_simd
-EMU_OBJS_ALL            += emu_inc_rp emu_inc_rp_optimized
+EMU_OBJS_ALL            += emu_inc_rp_common emu_inc_rp emu_inc_rp_optimized
 EMU_OBJS_ALL            += emu_inc_hash_md4 emu_inc_hash_md5 emu_inc_hash_ripemd160 emu_inc_hash_sha1 emu_inc_hash_sha256 emu_inc_hash_sha384 emu_inc_hash_sha512 emu_inc_hash_streebog256 emu_inc_hash_streebog512 emu_inc_ecc_secp256k1 emu_inc_bignum_operations
 EMU_OBJS_ALL            += emu_inc_cipher_aes emu_inc_cipher_camellia emu_inc_cipher_des emu_inc_cipher_kuznyechik emu_inc_cipher_serpent emu_inc_cipher_twofish
 EMU_OBJS_ALL            += emu_inc_hash_base58
 
-OBJS_ALL                := affinity autotune backend benchmark bitmap bitops combinator common convert cpt cpu_crc32 debugfile dictstat dispatch dynloader event ext_ADL ext_cuda ext_hip ext_nvapi ext_nvml ext_nvrtc ext_hiprtc ext_OpenCL ext_sysfs_amdgpu ext_sysfs_cpu ext_iokit ext_lzma filehandling folder hashcat hashes hlfmt hwmon induct interface keyboard_layout locking logfile loopback memory monitor mpsp outfile_check outfile pidfile potfile restore rp rp_cpu selftest slow_candidates shared status stdout straight terminal thread timer tuningdb usage user_options wordlist $(EMU_OBJS_ALL)
-
-ifeq ($(UNAME),Darwin)
-OBJS_ALL                += ext_metal
-endif
+OBJS_ALL                := affinity autotune backend benchmark bitmap bitops bridges combinator common convert cpt cpu_crc32 cpu_features debugfile dictstat dispatch dynloader event ext_ADL ext_cuda ext_hip ext_nvapi ext_nvml ext_nvrtc ext_hiprtc ext_OpenCL ext_sysfs_amdgpu ext_sysfs_intelgpu ext_sysfs_cpu ext_lzma filehandling folder hashcat hashes hlfmt hwmon induct interface keyboard_layout locking logfile loopback memory monitor mpsp outfile_check outfile pidfile potfile restore rp rp_cpu selftest slow_candidates shared status stdout straight generic terminal thread timer tuningdb usage user_options wordlist $(EMU_OBJS_ALL)
 
 ifeq ($(ENABLE_BRAIN),1)
 OBJS_ALL                += brain
@@ -419,8 +601,14 @@ NATIVE_OBJS             := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).NATIVE.o)
 LINUX_OBJS              := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).LINUX.o)
 WIN_OBJS                := $(foreach OBJ,$(OBJS_ALL),obj/$(OBJ).WIN.o)
 
+ifeq ($(UNAME),Darwin)
+OBJS_METAL              := ext_metal ext_iokit
+
+NATIVE_OBJS             += $(foreach OBJ,$(OBJS_METAL),obj/$(OBJ).METAL.NATIVE.o)
+endif
+
 ifeq ($(USE_SYSTEM_LZMA),0)
-OBJS_LZMA               := 7zCrc 7zCrcOpt 7zFile 7zStream Alloc Bra Bra86 BraIA64 CpuArch Delta LzmaDec Lzma2Dec Sha256 Sha256Opt Xz XzCrc64 XzCrc64Opt XzDec XzIn
+OBJS_LZMA               := 7zCrc 7zCrcOpt 7zFile 7zStream Alloc Bra Bra86 BraIA64 CpuArch Delta LzmaDec Lzma2Dec MtDec Sha256 Sha256Opt Threads Xz XzCrc64 XzCrc64Opt XzDec XzIn
 
 NATIVE_OBJS             += $(foreach OBJ,$(OBJS_LZMA),obj/$(OBJ).LZMA.NATIVE.o)
 LINUX_OBJS              += $(foreach OBJ,$(OBJS_LZMA),obj/$(OBJ).LZMA.LINUX.o)
@@ -456,32 +644,58 @@ endif
 endif
 
 ##
+## Tools
+##
+
+TOOLS                   += $(wildcard tools/*hashcat.pl)
+TOOLS                   += $(wildcard tools/*hashcat.py)
+
+##
 ## Targets: Native Compilation
 ##
 
 .PHONY: default
-default: $(HASHCAT_FRONTEND) modules
+default: $(HASHCAT_FRONTEND) modules bridges feeds
 
 .PHONY: clean
 clean:
 	$(RM) -f $(HASHCAT_FRONTEND)
 	$(RM) -f $(HASHCAT_LIBRARY)
 	$(RM) -rf modules/*.dSYM
+	$(RM) -rf bridges/*.dSYM
+	$(RM) -rf feeds/*.dSYM
+	$(RM) -rf *.dSYM
+	$(RM) -f bridges/subs/*.dll
+	$(RM) -f bridges/subs/*.so
+	$(RM) -f bridges/subs/*.su
+	$(RM) -f bridges/*.dll
+	$(RM) -f bridges/*.so
+	$(RM) -f bridges/*.su
+	$(RM) -f feeds/*.dll
+	$(RM) -f feeds/*.so
+	$(RM) -f feeds/*.su
 	$(RM) -f modules/*.dll
 	$(RM) -f modules/*.so
+	$(RM) -f modules/*.su
 	$(RM) -f obj/*/*/*.o
+	$(RM) -f obj/*/*/*.su
 	$(RM) -f obj/*/*.o
+	$(RM) -f obj/*/*.su
 	$(RM) -f obj/*.o
+	$(RM) -f obj/*.su
 	$(RM) -f obj/*.a
-	$(RM) -rf *.dSYM
 	$(RM) -f *.dylib
 	$(RM) -f *.bin *.exe
 	$(RM) -f *.pid
 	$(RM) -f *.log
+	$(RM) -f *.su
 	$(RM) -f core
 	$(RM) -rf *.induct
 	$(RM) -rf *.outfiles
 	$(RM) -rf kernels
+	$(RM) -rf Rust/bridges/*/target
+	$(RM) -rf Rust/feeds/*/target
+	$(RM) -rf Rust/hashcat-sys/src/bindings.rs
 
 .PHONY: distclean
 distclean: clean
@@ -492,6 +706,7 @@ distclean: clean
 	$(RM) -f brain.*
 	$(RM) -rf test_[0-9]*
 	$(RM) -rf tools/luks_tests
+	$(RM) -rf tools/luks2_tests
 
 ##
 ## Targets: Linux install
@@ -500,10 +715,10 @@ distclean: clean
 # allow (whitelist) "make install" only on unix-based systems (also disallow cygwin/msys)
 
 ifneq ($(findstring install,$(MAKECMDGOALS)),)
-  ifeq (,$(filter $(UNAME),Linux FreeBSD Darwin NetBSD))
+  ifeq (,$(filter $(UNAME),Linux FreeBSD OpenBSD NetBSD DragonFly Darwin))
     define ERROR_INSTALL_DISALLOWED
 ! The 'install' target is not allowed on this operating system ($(UNAME)). \
-Only Linux, FreeBSD, NetBSD and Darwin can use the 'install' target
+Only Linux, FreeBSD, OpenBSD, NetBSD, DragonFly and Darwin can use the 'install' target
     endef
 
     $(error $(ERROR_INSTALL_DISALLOWED))
@@ -512,9 +727,9 @@ endif
 
 .PHONY: install
 ifeq ($(SHARED),1)
-install: install_docs install_shared install_library install_library_dev install_tunings install_kernels install_modules install_hashcat
+install: install_docs install_shared install_tools install_library install_library_dev install_tunings install_kernels install_modules install_bridges install_feeds install_hashcat
 else
-install: install_docs install_shared                                     install_tunings install_kernels install_modules install_hashcat
+install: install_docs install_shared install_tools                                     install_tunings install_kernels install_modules install_bridges install_feeds install_hashcat
 endif
 
 # we need this extra target to make sure that for parallel builds (i.e. 2+ Makefile targets could possible run at the same time)
@@ -538,7 +753,6 @@ install_docs: install_make_shared_root
 	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(DOCUMENT_FOLDER)/rules
 	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(DOCUMENT_FOLDER)/extra
 	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(DOCUMENT_FOLDER)/extra/tab_completion
-	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(DOCUMENT_FOLDER)/tools
 	$(INSTALL) -m 644 example.dict                                          $(DESTDIR)$(DOCUMENT_FOLDER)/
 	$(INSTALL) -m 644 example0.hash                                         $(DESTDIR)$(DOCUMENT_FOLDER)/
 	$(INSTALL) -m 644 example400.hash                                       $(DESTDIR)$(DOCUMENT_FOLDER)/
@@ -559,7 +773,6 @@ install_docs: install_make_shared_root
 	$(FIND) masks/    -type f -exec $(INSTALL) -m 644 {}                    $(DESTDIR)$(DOCUMENT_FOLDER)/{} \;
 	$(FIND) rules/    -type d -exec $(INSTALL) -m 755 -d                    $(DESTDIR)$(DOCUMENT_FOLDER)/{} \;
 	$(FIND) rules/    -type f -exec $(INSTALL) -m 644 {}                    $(DESTDIR)$(DOCUMENT_FOLDER)/{} \;
-	$(FIND) tools/    -type f -name '*cat.p[ly]' -exec $(INSTALL) -m 755 {} $(DESTDIR)$(DOCUMENT_FOLDER)/{} \;
 	$(SED) $(SED_IN_PLACE) 's/\.\/hashcat/hashcat/'                         $(DESTDIR)$(DOCUMENT_FOLDER)/example0.sh
 	$(SED) $(SED_IN_PLACE) 's/\.\/hashcat/hashcat/'                         $(DESTDIR)$(DOCUMENT_FOLDER)/example400.sh
 	$(SED) $(SED_IN_PLACE) 's/\.\/hashcat/hashcat/'                         $(DESTDIR)$(DOCUMENT_FOLDER)/example500.sh
@@ -587,6 +800,18 @@ install_modules: install_shared modules
 	$(FIND) modules/  -mindepth 1 -type d -execdir $(INSTALL) -m 755 -d     $(DESTDIR)$(SHARED_FOLDER)/modules/{} \;
 	$(FIND) modules/  -mindepth 1 -type f -execdir $(INSTALL) -m 644 {}     $(DESTDIR)$(SHARED_FOLDER)/modules/{} \;
 
+.PHONY: install_bridges
+install_bridges: install_shared bridges
+	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(SHARED_FOLDER)/bridges
+	$(FIND) bridges/  -mindepth 1 -type d -execdir $(INSTALL) -m 755 -d     $(DESTDIR)$(SHARED_FOLDER)/bridges/{} \;
+	$(FIND) bridges/  -mindepth 1 -type f -execdir $(INSTALL) -m 644 {}     $(DESTDIR)$(SHARED_FOLDER)/bridges/{} \;
+
+.PHONY: install_feeds
+install_feeds: install_shared feeds
+	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(SHARED_FOLDER)/feeds
+	$(FIND) feeds/    -mindepth 1 -type d -execdir $(INSTALL) -m 755 -d     $(DESTDIR)$(SHARED_FOLDER)/feeds/{} \;
+	$(FIND) feeds/    -mindepth 1 -type f -execdir $(INSTALL) -m 644 {}     $(DESTDIR)$(SHARED_FOLDER)/feeds/{} \;
+
 .PHONY: install_library
 install_library: $(HASHCAT_LIBRARY)
 	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(LIBRARY_FOLDER)
@@ -603,9 +828,15 @@ install_hashcat: $(HASHCAT_FRONTEND)
 	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(INSTALL_FOLDER)
 	$(INSTALL) -m 755 $(HASHCAT_FRONTEND)                                   $(DESTDIR)$(INSTALL_FOLDER)/
 
+.PHONY: install_tools
+install_tools:
+	$(INSTALL) -m 755 -d                                                    $(DESTDIR)$(INSTALL_FOLDER)
+	$(INSTALL) -m 755 ${TOOLS}                                              $(DESTDIR)$(INSTALL_FOLDER)/
+
 .PHONY: uninstall
 uninstall:
 	$(RM) -f  $(DESTDIR)$(INSTALL_FOLDER)/$(HASHCAT_FRONTEND)
+	$(RM) -f  $(addprefix $(DESTDIR)$(INSTALL_FOLDER)/,$(notdir ${TOOLS}))
 	$(RM) -f  $(DESTDIR)$(LIBRARY_FOLDER)/$(HASHCAT_LIBRARY)
 	$(RM) -rf $(DESTDIR)$(LIBRARY_DEV_FOLDER)
 	$(RM) -rf $(DESTDIR)$(SHARED_FOLDER)
@@ -618,8 +849,10 @@ uninstall:
 obj/%.NATIVE.o: src/%.c
 	$(CC) -c $(CCFLAGS) $(CFLAGS_NATIVE) $< -o $@ -fpic
 
-obj/%.NATIVE.o: src/%.m
+ifeq ($(UNAME),Darwin)
+obj/%.METAL.NATIVE.o: src/%.m
 	$(CC) -c $(CCFLAGS) $(CFLAGS_NATIVE) $< -o $@ -fpic
+endif
 
 ifeq ($(USE_SYSTEM_LZMA),0)
 obj/%.LZMA.NATIVE.o: $(DEPS_LZMA_PATH)/%.c
@@ -646,14 +879,19 @@ endif
 endif
 
 obj/combined.NATIVE.a: $(NATIVE_OBJS)
+ifeq ($(UNAME),Darwin)
+ifeq ($(IS_APPLE_SILICON),1)
+	$(RM) -f obj/combined.NATIVE.a
+endif
+endif
 	$(AR) rcs $@ $^
 
 ifeq ($(UNAME),Darwin)
 $(HASHCAT_LIBRARY): $(NATIVE_OBJS)
-	$(CC)                     $^ -o $@                    $(LFLAGS_NATIVE) -shared -install_name $(DESTDIR)$(LIBRARY_FOLDER)/$(HASHCAT_LIBRARY) -current_version $(VERSION_PURE) -compatibility_version $(VERSION_PURE)
+	$(CXX)                    $^ -o $@                    $(LFLAGS_NATIVE) -shared -install_name $(DESTDIR)$(LIBRARY_FOLDER)/$(HASHCAT_LIBRARY) -current_version $(VERSION_PURE) -compatibility_version $(VERSION_PURE)
 else
 $(HASHCAT_LIBRARY): $(NATIVE_OBJS)
-	$(CC)                     $^ -o $@                    $(LFLAGS_NATIVE) -shared -Wl,-soname,$(HASHCAT_LIBRARY)
+	$(CXX)                    $^ -o $@                    $(LFLAGS_NATIVE) -shared -Wl,-soname,$(HASHCAT_LIBRARY)
 endif
 
 ifeq ($(SHARED),1)
@@ -704,10 +942,78 @@ MODULES_LIB   := $(patsubst src/modules/module_%.c, modules/module_%.$(MODULE_SU
 modules: $(MODULES_LIB)
 
 ##
+## native compiled bridges
+##
+
+BRIDGE_SUFFIX := so
+
+ifeq ($(UNAME),CYGWIN)
+BRIDGE_SUFFIX := dll
+endif
+
+ifeq ($(UNAME),MSYS2)
+BRIDGE_SUFFIX := dll
+endif
+
+BRIDGES_SRC   := $(wildcard src/bridges/*.c)
+
+## not used so far, see modules above
+BRIDGES_DISABLE ?=
+
+$(BRIDGES_DISABLE): ;
+
+ifeq ($(SHARED),1)
+bridges/bridge_%.$(BRIDGE_SUFFIX): src/bridges/bridge_%.c $(HASHCAT_LIBRARY)
+	$(CC)    $(CCFLAGS) $(CFLAGS_NATIVE) $^ -o $@ $(LFLAGS_NATIVE) -shared -fPIC -D BRIDGE_INTERFACE_VERSION_CURRENT=$(BRIDGE_INTERFACE_VERSION)
+else
+bridges/bridge_%.$(BRIDGE_SUFFIX): src/bridges/bridge_%.c obj/combined.NATIVE.a
+	$(CC)    $(CCFLAGS) $(CFLAGS_NATIVE) $^ -o $@ $(LFLAGS_NATIVE) -shared -fPIC -D BRIDGE_INTERFACE_VERSION_CURRENT=$(BRIDGE_INTERFACE_VERSION)
+endif
+
+BRIDGES_LIB   := $(patsubst src/bridges/bridge_%.c, bridges/bridge_%.$(BRIDGE_SUFFIX), $(BRIDGES_SRC))
+
+.PHONY: bridges
+bridges: $(BRIDGES_LIB)
+
+##
+## native compiled feeds
+##
+
+FEEDS_SUFFIX := so
+
+ifeq ($(UNAME),CYGWIN)
+FEEDS_SUFFIX := dll
+endif
+
+ifeq ($(UNAME),MSYS2)
+FEEDS_SUFFIX := dll
+endif
+
+FEEDS_SRC := $(wildcard src/feeds/*.c)
+
+## not used so far, see modules above
+FEEDS_DISABLE ?=
+
+$(FEEDS_DISABLE): ;
+
+ifeq ($(SHARED),1)
+feeds/feed_%.$(FEEDS_SUFFIX): src/feeds/feed_%.c $(HASHCAT_LIBRARY)
+	$(CC)    $(CCFLAGS) $(CFLAGS_NATIVE) $^ -o $@ $(LFLAGS_NATIVE) -shared -fPIC -D FEEDS_INTERFACE_VERSION_CURRENT=$(FEEDS_INTERFACE_VERSION)
+else
+feeds/feed_%.$(FEEDS_SUFFIX): src/feeds/feed_%.c obj/combined.NATIVE.a
+	$(CC)    $(CCFLAGS) $(CFLAGS_NATIVE) $^ -o $@ $(LFLAGS_NATIVE) -shared -fPIC -D FEEDS_INTERFACE_VERSION_CURRENT=$(FEEDS_INTERFACE_VERSION)
+endif
+
+FEEDS_LIB := $(patsubst src/feeds/feed_%.c, feeds/feed_%.$(FEEDS_SUFFIX), $(FEEDS_SRC))
+
+.PHONY: feeds
+feeds: $(FEEDS_LIB)
+
+##
 ## Cross Compilation (binary release version)
 ##
 
-ifeq ($(UNAME),Linux)
+ifneq (,$(filter $(UNAME),Linux Darwin))
 
 ##
 ## Compiler paths
@@ -721,42 +1027,134 @@ CXX_WIN                 := x86_64-w64-mingw32-g++
 AR_LINUX                := ar
 AR_WIN                  := x86_64-w64-mingw32-ar
 
-## To compile win-iconv with mingw clone from here: https://github.com/win-iconv/win-iconv
-##
-## Then patch the makefile with the patches from tools/win-iconv-64.diff and run make install
-##
-
+# See BUILD_WSL.md to make these
 WIN_ICONV               := /opt/win-iconv-64
+WIN_PYTHON              := /opt/win-python
 
 ##
 ## Compiler options
 ##
 
+CC_LINUX_CLANG          := 0
+CC_WIN_CLANG            := 0
+
+ifneq (,$(findstring clang, $(CC_LINUX)))
+CC_LINUX_CLANG          := 1
+endif
+
+ifneq (,$(findstring clang, $(CC_WIN)))
+CC_WIN_CLANG            := 1
+endif
+
 CFLAGS_CROSS_LINUX      := $(CFLAGS)
 CFLAGS_CROSS_LINUX      += -fPIC
 CFLAGS_CROSS_LINUX      += -DWITH_HWMON
+
+ifeq ($(CC_LINUX_CLANG),1)
+CFLAGS_CROSS_LINUX      += -Wno-typedef-redefinition
+CFLAGS_CROSS_LINUX      += -Wno-unknown-warning-option
+endif
+
 CFLAGS_CROSS_WIN        := $(CFLAGS)
 CFLAGS_CROSS_WIN        += -fPIC
 CFLAGS_CROSS_WIN        += -I$(WIN_ICONV)/include/
 CFLAGS_CROSS_WIN        += -DWITH_HWMON
-CFLAGS_CROSS_WIN        += -D__USE_MINGW_ANSI_STDIO=0
+
+ifeq ($(CC_WIN_CLANG),1)
+CFLAGS_CROSS_WIN        := $(filter-out -fno-plt,$(CFLAGS_CROSS_WIN))
+CFLAGS_CROSS_WIN        += --target=x86_64-w64-mingw32
+CFLAGS_CROSS_WIN        += -D_CLANG_DISABLE_CRT_DEPRECATION_WARNINGS
+CFLAGS_CROSS_WIN        += -D__INTRINSIC_DEFINED___cpuidex=1
+CFLAGS_CROSS_WIN        += -D__INTRINSIC_DEFINED__xgetbv=1
+CFLAGS_CROSS_WIN        += -Wno-typedef-redefinition
+CFLAGS_CROSS_WIN        += -Wno-ignored-attributes
+CFLAGS_CROSS_WIN        += -Wno-unknown-warning-option
+endif
 
 LFLAGS_CROSS_LINUX      := $(LFLAGS)
 LFLAGS_CROSS_LINUX      += -lpthread
 LFLAGS_CROSS_LINUX      += -ldl
 LFLAGS_CROSS_LINUX      += -lm
+LFLAGS_CROSS_LINUX      += -static-libgcc
+
+ifeq ($(CC_LINUX_CLANG),1)
+LFLAGS_CROSS_LINUX      += -stdlib=libc++
+else
+LFLAGS_CROSS_LINUX      += -static-libstdc++
+endif
+
+ifeq ($(USE_MOLD),1)
+LFLAGS_CROSS_LINUX      += -fuse-ld=mold
+else
+ifeq ($(ENABLE_LTO),1)
+ifeq ($(CC_LINUX_CLANG),1)
+LFLAGS_CROSS_LINUX      += -fuse-ld=lld
+else
+LFLAGS_CROSS_LINUX      += -fuse-ld=gold
+endif
+endif
+endif
+
 LFLAGS_CROSS_WIN        := $(LFLAGS)
+ifneq ($(UNAME),Darwin)
+LFLAGS_CROSS_WIN        += -lstdc++
+endif
+
+ifeq ($(CC_WIN_CLANG),0)
 LFLAGS_CROSS_WIN        += -Wl,--dynamicbase
 LFLAGS_CROSS_WIN        += -Wl,--nxcompat
+endif
 LFLAGS_CROSS_WIN        += -lpsapi
 LFLAGS_CROSS_WIN        += -lws2_32
 LFLAGS_CROSS_WIN        += -lpowrprof
-LFLAGS_CROSS_WIN        += -static -static-libgcc -static-libstdc++
+
+ifeq ($(CC_WIN_CLANG),0)
+LFLAGS_CROSS_WIN        += -static
+endif
+LFLAGS_CROSS_WIN        += -static-libgcc
+ifeq ($(CC_WIN_CLANG),0)
+LFLAGS_CROSS_WIN        += -static-libstdc++
+endif
+LFLAGS_CROSS_WIN        += -lole32 -loleaut32 -lwbemuuid
+
+ifeq ($(ENABLE_LTO),1)
+ifeq ($(CC_WIN_CLANG),1)
+LFLAGS_CROSS_WIN        += -fuse-ld=lld
+LFLAGS_CROSS_WIN        += -Wl,--stack,0x200000
+endif
+endif
+
+CFLAGS_LZMA_WIN         := $(CFLAGS_LZMA)
+CFLAGS_UNRAR_WIN        := $(CFLAGS_UNRAR)
+
+ifeq ($(UNAME),Darwin)
+CFLAGS_CROSS_WIN        := $(filter-out -Wno-typedef-redefinition,$(CFLAGS_CROSS_WIN))
+
+CFLAGS_LZMA_WIN         += -Wno-misleading-indentation
+
+CFLAGS_UNRAR_WIN        += -Wno-misleading-indentation
+CFLAGS_UNRAR_WIN        += -Wno-class-memaccess
+endif
+
+ifeq ($(IS_ARM),1)
+CFLAGS_CROSS_LINUX      += -DSSE2NEON_SUPPRESS_WARNINGS
+CFLAGS_CROSS_LINUX      += -I$(DEPS_SSE2NEON)
+endif
 
 ##
 ## Targets
 ##
 
+ifeq ($(UNAME),Darwin)
+.PHONY: binaries
+binaries: win
+
+.PHONY: host_win
+host_win:   hashcat.exe
+
+.PHONY: win
+win:   host_win   modules_win   bridges_win   feeds_win
+else
 .PHONY: binaries
 binaries: linux win
 
@@ -765,8 +1163,9 @@ host_linux: hashcat.bin
 host_win:   hashcat.exe
 
 .PHONY: linux win
-linux: host_linux modules_linux
-win:   host_win   modules_win
+linux: host_linux modules_linux bridges_linux feeds_linux
+win:   host_win   modules_win   bridges_win   feeds_win
+endif
 
 ##
 ## cross compiled modules
@@ -786,6 +1185,40 @@ modules/module_%.dll: src/modules/module_%.c obj/combined.WIN.a
 	$(CC_WIN)    $(CCFLAGS) $(CFLAGS_CROSS_WIN)   $^ -o $@ $(LFLAGS_CROSS_WIN)   -shared -fPIC -D MODULE_INTERFACE_VERSION_CURRENT=$(MODULE_INTERFACE_VERSION)
 
 ##
+## cross compiled bridges
+##
+
+BRIDGES_LIB_LINUX   := $(patsubst src/bridges/bridge_%.c, bridges/bridge_%.so,  $(BRIDGES_SRC))
+BRIDGES_LIB_WIN     := $(patsubst src/bridges/bridge_%.c, bridges/bridge_%.dll, $(BRIDGES_SRC))
+
+.PHONY: bridges_linux bridges_win
+bridges_linux: $(BRIDGES_LIB_LINUX)
+bridges_win:   $(BRIDGES_LIB_WIN)
+
+bridges/bridge_%.so:  src/bridges/bridge_%.c obj/combined.LINUX.a
+	$(CC_LINUX)  $(CCFLAGS) $(CFLAGS_CROSS_LINUX) $^ -o $@ $(LFLAGS_CROSS_LINUX) -shared -fPIC -D BRIDGE_INTERFACE_VERSION_CURRENT=$(BRIDGE_INTERFACE_VERSION)
+
+bridges/bridge_%.dll: src/bridges/bridge_%.c obj/combined.WIN.a
+	$(CC_WIN)    $(CCFLAGS) $(CFLAGS_CROSS_WIN)   $^ -o $@ $(LFLAGS_CROSS_WIN)   -shared -fPIC -D BRIDGE_INTERFACE_VERSION_CURRENT=$(BRIDGE_INTERFACE_VERSION)
+
+##
+## cross compiled feeds
+##
+
+FEEDS_LIB_LINUX   := $(patsubst src/feeds/feed_%.c, feeds/feed_%.so,  $(FEEDS_SRC))
+FEEDS_LIB_WIN     := $(patsubst src/feeds/feed_%.c, feeds/feed_%.dll, $(FEEDS_SRC))
+
+.PHONY: feeds_linux feeds_win
+feeds_linux: $(FEEDS_LIB_LINUX)
+feeds_win:   $(FEEDS_LIB_WIN)
+
+feeds/feed_%.so:  src/feeds/feed_%.c obj/combined.LINUX.a
+	$(CC_LINUX)  $(CCFLAGS) $(CFLAGS_CROSS_LINUX) $^ -o $@ $(LFLAGS_CROSS_LINUX) -shared -fPIC -D FEEDS_INTERFACE_VERSION_CURRENT=$(FEEDS_INTERFACE_VERSION)
+
+feeds/feed_%.dll: src/feeds/feed_%.c obj/combined.WIN.a
+	$(CC_WIN)    $(CCFLAGS) $(CFLAGS_CROSS_WIN)   $^ -o $@ $(LFLAGS_CROSS_WIN)   -shared -fPIC -D FEEDS_INTERFACE_VERSION_CURRENT=$(FEEDS_INTERFACE_VERSION)
+
+##
 ## cross compiled hashcat
 ##
 
@@ -797,10 +1230,10 @@ obj/%.WIN.o:   src/%.c
 
 ifeq ($(USE_SYSTEM_LZMA),0)
 obj/%.LZMA.LINUX.o: $(DEPS_LZMA_PATH)/%.c
-	$(CC_LINUX) $(CCFLAGS) $(CFLAGS_CROSS_LINUX) $(CFLAGS_LZMA) -c -o $@ $<
+	$(CC_LINUX) $(CCFLAGS) $(CFLAGS_CROSS_LINUX) $(CFLAGS_LZMA)     -c -o $@ $<
 
 obj/%.LZMA.WIN.o:   $(DEPS_LZMA_PATH)/%.c
-	$(CC_WIN)   $(CCFLAGS) $(CFLAGS_CROSS_WIN)   $(CFLAGS_LZMA) -c -o $@ $<
+	$(CC_WIN)   $(CCFLAGS) $(CFLAGS_CROSS_WIN)   $(CFLAGS_LZMA_WIN) -c -o $@ $<
 endif
 
 ifeq ($(USE_SYSTEM_ZLIB),0)
@@ -824,10 +1257,10 @@ endif
 ifeq ($(ENABLE_UNRAR),1)
 ifeq ($(USE_SYSTEM_UNRAR),0)
 obj/%.UNRAR.LINUX.o: $(DEPS_UNRAR_PATH)/%.cpp
-	$(CXX_LINUX) $(CXXFLAGS) $(CFLAGS_CROSS_LINUX) $(CFLAGS_UNRAR) -c -o $@ $<
+	$(CXX_LINUX) $(CXXFLAGS) $(CFLAGS_CROSS_LINUX) $(CFLAGS_UNRAR)     -c -o $@ $<
 
 obj/%.UNRAR.WIN.o:   $(DEPS_UNRAR_PATH)/%.cpp
-	$(CXX_WIN)   $(CXXFLAGS) $(CFLAGS_CROSS_WIN)   $(CFLAGS_UNRAR) -c -o $@ $<
+	$(CXX_WIN)   $(CXXFLAGS) $(CFLAGS_CROSS_WIN)   $(CFLAGS_UNRAR_WIN) -c -o $@ $<
 endif
 endif
 
@@ -848,5 +1281,7 @@ hashcat.dll: src/main.c obj/combined.WIN.a $(WIN_ICONV)/lib/libiconv.a
 
 endif
 
-# Give plugin developers a chance to add some 3rd party libraries
-include	$(wildcard src/modules/module_*.mk)
+# Give developers a chance to add some 3rd party dependancies
+include	$(wildcard src/modules/*.mk)
+include $(wildcard src/bridges/*.mk)
+include $(wildcard src/feeds/*.mk)

@@ -7,6 +7,7 @@
 #define HC_SHARED_H
 
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -24,6 +25,10 @@
 #include <sys/select.h>
 #endif
 
+#ifndef __MINGW_PRINTF_FORMAT
+#define __MINGW_PRINTF_FORMAT printf
+#endif
+
 int sort_by_string_sized (const void *p1, const void *p2);
 int sort_by_stringptr    (const void *p1, const void *p2);
 
@@ -33,6 +38,7 @@ bool overflow_check_u64_add (const u64 a, const u64 b);
 bool overflow_check_u64_mul (const u64 a, const u64 b);
 
 bool is_power_of_2 (const u32 v);
+u32 smallest_repeat_double (const u32 v);
 
 u32 get_random_num (const u32 min, const u32 max);
 
@@ -44,9 +50,9 @@ char *filename_from_filepath (char *filepath);
 void naive_replace (char *s, const char key_char, const char replace_char);
 void naive_escape (char *s, size_t s_max, const char key_char, const char escape_char);
 
-__attribute__ ((format (printf, 2, 3))) int hc_asprintf (char **strp, const char *fmt, ...);
+__attribute__ ((format (__MINGW_PRINTF_FORMAT, 2, 3))) int hc_asprintf (char **strp, const char *fmt, ...);
 
-void setup_environment_variables (const folder_config_t *folder_config);
+void setup_environment_variables (const folder_config_t *folder_config, const user_options_t *user_options);
 void setup_umask (void);
 void setup_seeding (const bool rp_gen_seed_chgd, const u32 rp_gen_seed);
 
@@ -69,7 +75,7 @@ int  hc_string_bom_size (const u8 *s);
 void hc_string_trim_trailing (char *s);
 void hc_string_trim_leading (char *s);
 
-int hc_get_processor_count ();
+int hc_get_processor_count (void);
 
 bool hc_same_files (char *file1, char *file2);
 
@@ -104,10 +110,33 @@ int  generic_salt_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, const u8 
 
 int input_tokenizer (const u8 *input_buf, const int input_len, hc_token_t *token);
 
+int extract_dynamicx_hash (const u8 *input_buf, const int input_len, u8 **output_buf, int *output_len);
+
+int get_current_arch();
+
 #if defined (__APPLE__)
 bool is_apple_silicon (void);
 #endif
 
 char *file_to_buffer (const char *filename);
+
+bool check_file_suffix (const char *file, const char *suffix);
+bool remove_file_suffix (char *file, const char *suffix);
+
+int suppress_stderr (void);
+void restore_stderr (int saved_fd);
+
+bool get_free_memory (u64 *free_mem);
+
+u32 previous_power_of_two (const u32 x);
+u32 next_power_of_two (const u32 x);
+
+typedef size_t (*hc_memchr_t) (const u8 *ptr, int ch, size_t max_len);
+
+size_t hc_memchr_generic      (const u8 *ptr, int ch, size_t max_len);
+size_t hc_memchr_avx2         (const u8 *ptr, int ch, size_t max_len);
+size_t hc_memchr_avx512       (const u8 *ptr, int ch, size_t max_len);
+
+hc_memchr_t hc_memchr_get     (void);
 
 #endif // HC_SHARED_H

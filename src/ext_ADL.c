@@ -11,7 +11,7 @@
 
 #include "dynloader.h"
 
-void *HC_API_CALL ADL_Main_Memory_Alloc (const int iSize)
+void *HC_ADL_API_CALL ADL_Main_Memory_Alloc (const int iSize)
 {
   return malloc ((size_t) iSize);
 }

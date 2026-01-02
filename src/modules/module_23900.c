@@ -22,6 +22,7 @@ static const u64   KERN_TYPE      = 23900;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_PT_GENERATE_LE
+                                  | OPTS_TYPE_NATIVE_THREADS
                                   | OPTS_TYPE_ST_HEX;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "hashcat";
@@ -143,9 +144,6 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   if (parse_rc == false) return (PARSER_SALT_LENGTH);
 
-  salt->salt_buf[0] = salt->salt_buf[0];
-  salt->salt_buf[1] = salt->salt_buf[1];
-
   salt->salt_buf[0] = byte_swap_32 (salt->salt_buf[0]);
   salt->salt_buf[1] = byte_swap_32 (salt->salt_buf[1]);
 
@@ -185,7 +183,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   u8 data_hex[193] = { 0 };
 
-  hex_encode ((u8 *) bestcrypt->data, 96, data_hex);
+  hex_encode ((const u8 *) bestcrypt->data, 96, data_hex);
 
   int out_len = snprintf (line_buf, line_size, "%s3$08$%s$%s",
     SIGNATURE_BESTCRYPT,
@@ -207,6 +205,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

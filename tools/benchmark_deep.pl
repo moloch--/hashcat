@@ -8,364 +8,546 @@
 use strict;
 use warnings;
 
+use File::Path qw(make_path);
+
+my $startTime        = time();
+my $workdir          = "test_benchmarkDeep_$startTime";
+
 my $nvidia_cache     = "~/.nv";
 my $amd_cache        = "~/.AMD";
 my $hashcat_path     = ".";
 my $kernels_cache    = "$hashcat_path/kernels";
 my $hashcat_bin      = "$hashcat_path/hashcat";
-my $device           = 3;
+my $device           = 1;
 my $workload_profile = 3;
-my $runtime          = 24;
-my $sleep_sec        = 12;
-my $default_mask     = "?b?b?b?b?b?b?b";
-my $result           = "result.txt";
+my $runtime          = 11;
+my $sleep_sec        = 13;
+my $default_mask     = "?a?a?a?a?a?a?a";
+my $result           = "$workdir/result.txt";
 my $old_hashcat      = 0; # requires to have ran with new hashcat before to create the hashfiles
 my $repeats          = 0;
 my $cpu_benchmark    = 0;
 
-print "\nHardware preparations... You may need to adjust some settings and probably can ignore some of the error\n\n";
-
-system ("echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor");
-
-if ($cpu_benchmark == 1)
+unless (-d $workdir)
 {
-  system ("echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo"); ## for CPU benchmark Intel
-  system ("echo 0 > /sys/devices/system/cpu/cpufreq/boost");         ## for CPU benchmark AMD
-}
-else
-{
-  system ("rocm-smi --resetprofile --resetclocks --resetfans");
-  system ("rocm-smi --setfan 100% --setperflevel high");
-
-  system ("nvidia-smi -rac");
-  system ("nvidia-smi -pm ENABLED");
-  system ("nvidia-smi -acp UNRESTRICTED");
-  system ("nvidia-smi -pl 225"); ## needs per-gpu adjust
-  system ("nvidia-settings -a GPUPowerMizerMode=1 -a GPUFanControlState=1 -a GPUTargetFanSpeed=100");
+  make_path($workdir) or die "Unable to create '$workdir': $!";
 }
 
-print "\n\nStarting...\n\n";
+print "\n[$workdir] > Hardware preparations... You may need to adjust some settings and probably can ignore some of the error\n\n";
 
-system ("rm -rf $nvidia_cache");
-system ("rm -rf $amd_cache");
+if ($^O eq 'linux')
+{
+  system ("echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor");
+
+  if ($cpu_benchmark == 1)
+  {
+    system ("sudo echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo"); ## for CPU benchmark Intel
+    system ("sudo echo 0 > /sys/devices/system/cpu/cpufreq/boost");         ## for CPU benchmark AMD
+  }
+  else
+  {
+    #system ("rocm-smi --resetprofile --resetclocks --resetfans");
+    #system ("rocm-smi --setfan 100% --setperflevel high");
+
+    system ("nvidia-settings -a GPUPowerMizerMode=1 -a GPUFanControlState=1 -a GPUTargetFanSpeed=100");
+  }
+
+  system ("rm -rf $nvidia_cache");
+  system ("rm -rf $amd_cache");
+}
+elsif ($^O eq 'darwin')
+{
+  open(my $stderr_orig, '>&', STDERR) or die "Can't dup STDERR: $!";
+
+  open(STDERR, '>', '/dev/null') or die "Can't redirect STDERR: $!";
+
+  chomp(my $temp_dir  = `getconf DARWIN_USER_TEMP_DIR`);
+  chomp(my $cache_dir = `getconf DARWIN_USER_CACHE_DIR`);
+
+  # cleanup OpenCL cache
+  system("find \"$temp_dir\" -mindepth 1 -exec rm -rf {} +");
+  # cleanup OpenCL/Metal cache
+  system("rm -rf \"$cache_dir/com.apple.metalfe/*\"");
+  # cleanup Metal cache
+  system("rm -rf \"$cache_dir/com.apple.metal/*\"");
+
+  open(STDERR, '>&', $stderr_orig) or die "Can't restore STDERR: $!";
+}
+
 system ("rm -rf $kernels_cache");
+
+print "\n\n[$workdir] > Starting...\n\n";
 
 my @hash_types_selection =
 (
+  900,
   0,
   100,
   1400,
   1700,
-  22000,
+  17400,
+  17600,
+  31000,
+  600,
+  11700,
+  11800,
+  5100,
+  31100,
+  11500,
+  18700,
+  34000,
+  8900,
+  400,
   1000,
   3000,
+  22000,
+  13100,
   5500,
   5600,
-  1500,
-  500,
-  3200,
-  1800,
-  7500,
-  13100,
   15300,
   15900,
-  7100,
-  11600,
-  12500,
-  13000,
-  6241,
-  13400,
-  6800,
-  11300,
-);
-
-my @hash_types =
-(
-  0,
-  20,
-  50,
-  60,
-  100,
-  120,
-  150,
-  160,
-  200,
-  300,
-  400,
-  500,
-  600,
-  900,
-  1000,
+  33700,
+  28100,
+  9200,
+  9300,
+  5700,
   1100,
-  1300,
-  1400,
-  1420,
-  1450,
-  1460,
-  1600,
-  1600,
-  1700,
-  1720,
-  1750,
-  1760,
-  1800,
   2100,
-  2400,
-  2410,
-  2611,
-  2711,
-  2811,
-  3000,
-  3100,
-  3200,
-  3710,
-  3800,
-  3910,
-  4010,
-  4110,
-  4300,
-  4400,
-  4500,
-  4520,
-  4700,
-  4800,
-  4900,
-  5100,
-  5200,
-  5300,
-  5400,
-  5500,
-  5600,
-  5800,
-  6000,
-  6100,
-  6211,
-  6221,
-  6231,
-  6241,
-  6300,
-  6400,
-  6500,
-  6600,
-  6700,
-  6800,
-  6900,
-  7000,
   7100,
-  7300,
+  3200,
+  500,
+  1500,
   7400,
-  7500,
-  7700,
-  7701,
-  7800,
-  7801,
-  7900,
-  8000,
-  8100,
-  8200,
+  1800,
+  35100,
+  14000,
+  14100,
+  26401,
+  26403,
+  12300,
+  300,
   8300,
-  8400,
-  8500,
-  8600,
-  8700,
-  8800,
-  8900,
-  9000,
-  9100,
+  1600,
+  16700,
+  18300,
+  22100,
+  29511,
+  34100,
+  29421,
+  29341,
+  12200,
+  10400,
+  10510,
+  10500,
+  10600,
+  10700,
   9400,
   9500,
   9600,
   9700,
-  9710,
-  9720,
   9800,
-  9810,
-  9820,
-  9900,
-  10100,
-  10300,
-  10400,
-  10410,
-  10420,
-  10500,
-  10700,
-  10800,
-  10900,
-  11000,
-  11100,
-  11200,
-  11300,
-  11400,
-  11500,
+  13400,
+  6800,
+  23400,
+  26100,
+  23100,
   11600,
+  12500,
+  23800,
+  13000,
+  17220,
+  17200,
+  20500,
+  13600,
+  18100,
+  17010,
+  17030,
+  22921,
+  25500,
+  16300,
+  15600,
+  15700,
+  22500,
+  27700,
+  22700,
+  2611,
+  2711,
+  31900,
+  26610,
+  11300,
+  16600,
+  21700,
+  21800,
+  10,
+  20,
+  110,
+  120,
+  1410,
+  1420,
+  10810,
+  10820,
+  1710,
+  1720,
+);
+
+my @hash_types =
+(
+  900,
+  0,
+  100,
+  1400,
+  1700,
+  17400,
+  17600,
+  6000,
+  33600,
+  600,
+  31000,
   11700,
-  11750,
-  11760,
   11800,
-  11850,
-  11860,
+  6900,
+  5100,
+  17800,
+  18000,
+  31100,
+  6100,
+  610,
+  620,
+  10,
+  20,
+  110,
+  120,
+  1410,
+  1420,
+  1710,
+  1720,
+  10100,
+  11500,
+  27900,
+  28000,
+  18700,
+  25700,
+  27800,
+  34200,
+  34201,
+  34211,
+  33502,
+  33500,
+  33501,
+  14100,
+  14000,
+  26401,
+  26403,
+  15400,
+  14500,
+  14900,
+  32900,
   11900,
   12000,
-  12200,
-  12300,
-  12400,
-  12500,
-  12600,
-  12700,
-  12800,
-  12900,
-  13000,
-  13100,
-  13200,
-  13300,
-  13400,
-  13500,
-  13600,
-  13711,
-  13721,
-  13731,
-  13741,
-  13751,
-  13761,
-  13771,
-  13781,
-  13800,
-  13900,
-  14000,
-  14100,
-  14400,
-  14500,
-  14700,
-  14800,
-  14900,
-  15000,
-  15100,
-  15200,
-  15300,
-  15400,
-  15500,
-  15600,
-  15900,
-  16000,
+  10900,
+  12100,
+  34000,
+  8900,
+  400,
   16100,
-  16200,
-  16300,
-  16400,
+  30420,
+  11400,
+  5300,
+  5400,
+  25000,
+  25200,
+  26800,
+  27300,
+  22000,
+  22001,
+  7350,
+  7300,
+  10200,
+  31300,
   16500,
-  16600,
-  16700,
-  16900,
-  17210,
-  17300,
-  17400,
-  17500,
-  17600,
-  17700,
-  17800,
-  17900,
-  18000,
-  18100,
+  19600,
+  19800,
+  28800,
+  32100,
+  19700,
+  19900,
+  28900,
+  32200,
+  7500,
+  13100,
   18200,
-  18300,
-  18400,
-  18500,
-  18600,
-  18700,
-  18800,
-  18900,
+  5500,
+  5600,
+  29100,
+  4800,
+  8500,
+  14200,
+  6300,
+  6700,
+  6400,
+  6500,
+  3000,
   19000,
   19100,
   19200,
-  19300,
-  19500,
-  19600,
-  19700,
-  19800,
-  19900,
+  19210,
+  15300,
+  15310,
+  15900,
+  15910,
+  7200,
+  12800,
+  12400,
+  1000,
+  9900,
+  5800,
+  33700,
+  28100,
+  13800,
+  2410,
+  9200,
+  9300,
+  5700,
+  2400,
+  33900,
+  8100,
+  22200,
+  1100,
+  2100,
+  7000,
+  26300,
+  125,
+  501,
+  22,
+  15100,
+  26500,
+  122,
+  1722,
+  7100,
+  3200,
+  500,
+  1500,
+  7400,
+  1800,
+  35100,
+  131,
+  132,
+  1731,
+  24100,
+  24200,
+  12,
+  11100,
+  28600,
+  3100,
+  112,
+  12300,
+  7401,
+  11200,
+  200,
+  300,
+  8000,
+  8300,
+  25900,
+  16400,
+  1411,
+  1711,
+  29200,
+  24900,
+  10901,
+  15000,
+  12600,
+  1600,
+  141,
+  1441,
+  1421,
+  101,
+  111,
+  7700,
+  7701,
+  7800,
+  7801,
+  10300,
+  35000,
+  20712,
+  32031,
+  32041,
+  133,
+  13500,
+  32000,
+  32050,
+  32060,
+  32070,
+  32020,
+  32030,
+  32040,
+  32010,
+  21500,
+  21501,
+  24,
+  8600,
+  8700,
+  9100,
+  26200,
+  20600,
+  4711,
+  20711,
+  22400,
+  27400,
+  29511,
+  34100,
+  29421,
+  23900,
+  24000,
+  16700,
+  27500,
+  27600,
   20011,
-  20012,
-  20013,
+  22100,
+  12900,
+  8800,
+  18300,
+  29341,
+  12200,
+  10400,
+  10410,
+  10420,
+  10510,
+  10500,
+  25400,
+  10600,
+  10700,
+  9400,
+  9500,
+  9600,
+  25300,
+  9700,
+  9710,
+  9720,
+  9810,
+  9820,
+  9800,
+  18400,
+  18600,
+  16200,
+  23300,
+  6600,
+  8200,
+  31800,
+  9000,
+  5200,
+  6800,
+  13400,
+  23400,
+  16900,
+  26000,
+  26100,
+  23100,
+  11600,
+  12500,
+  23800,
+  23700,
+  13000,
+  17220,
+  17200,
   20500,
   20510,
-  20600,
-  20710,
-  20800,
-  20900,
-  21000,
-  21100,
-  21200,
-  21300,
-  21400,
-  21500,
+  23001,
+  23002,
+  23003,
+  31200,
+  13600,
+  18900,
+  32700,
+  24700,
+  13200,
+  13300,
+  23500,
+  23600,
+  14700,
+  14800,
+  33400,
+  8400,
+  33800,
+  2612,
+  121,
+  3711,
+  4521,
+  22800,
+  24800,
+  32300,
+  11,
+  13900,
+  11000,
+  16000,
+  7900,
+  32600,
+  4522,
+  2811,
+  2611,
+  2711,
+  21,
+  18100,
   21600,
-  21700,
-  21800,
-  22000,
-  22100,
-  22200,
-  22300,
-  22400,
-  22500,
-  22600,
-  22700,
+  16501,
+  10000,
+  124,
+  12150,
+  12001,
+  19500,
+  27200,
+  30000,
+  30120,
+  20200,
+  20300,
+  20400,
+  24410,
+  24420,
+  15500,
+  17010,
+  17020,
+  17030,
+  17040,
   22911,
   22921,
   22931,
   22941,
   22951,
-  23001,
-  23002,
-  23003,
-  23100,
   23200,
-  23300,
-  23400,
-  23500,
-  23600,
-  23700,
-  23800,
-  23900,
-  24100,
-  24200,
-  24300,
-  24410,
-  24420,
+  28300,
+  22600,
   24500,
-  24600,
-  24700,
-  24800,
-  24900,
-  25000,
-  25100,
-  25200,
-  25300,
-  25400,
-  25500,
-  25700,
-  25900,
-  26000,
-  26100,
-  26200,
-  26300,
-  26401,
-  26402,
-  26403,
-  26500,
+  22301,
+  23,
+  30700,
+  29600,
+  31900,
   26600,
-  26700,
-  26800,
-  26900,
-  27000,
-  27100,
-  27200,
-  27300,
-  27400,
-  27500,
-  27600,
+  26610,
+  29800,
+  21000,
+  11300,
+  16600,
+  21700,
+  21800,
+  12700,
+  15200,
+  18800,
+  32500,
+  25500,
+  16300,
+  15600,
+  15700,
+  22500,
   27700,
-  27800,
-  27900,
-  28000,
+  22700,
+  28200,
+  29910,
+  29920,
+  29930,
+  29940,
+  24600,
+  31400,
+  28700,
 );
 
 if (scalar @ARGV)
@@ -379,9 +561,11 @@ chdir ($hashcat_path);
 
 for my $hash_type (@hash_types)
 {
-  # banchmark always in optimized mode with single hash and mask!
+  # benchmark always in optimized mode with single hash and mask!
 
   my $mask = $default_mask;
+
+  my $filepath = "$workdir/tmp.hash.$hash_type";
 
   if ($old_hashcat == 0)
   {
@@ -390,7 +574,7 @@ for my $hash_type (@hash_types)
     my $st_hash   = $module->{"st_hash"};
     my $is_binary = $module->{"is_binary"};
 
-    open (OUT, ">", "tmp.hash.$hash_type") or die;
+    open (OUT, ">", $filepath) or die;
 
     if ($is_binary)
     {
@@ -410,7 +594,7 @@ for my $hash_type (@hash_types)
   (
     $hashcat_bin, "-D2",
     "--quiet",
-    "tmp.hash.$hash_type",
+    $filepath,
     "--keep-guessing",
     "--self-test-disable",
     "--markov-disable",
@@ -439,13 +623,13 @@ for my $hash_type (@hash_types)
     push (@command, "--backend-devices", $device);
   }
 
-  print "Executing command: ", join (" ", @command), "\n";
+  print "[$workdir] > Executing command: ", join (" ", @command), "\n";
 
   my $final_speed = 0;
 
   for (my $i = 0; $i <= $repeats; $i++)
   {
-    printf ("Run #%d\n", $i);
+    printf ("[$workdir] > Run #%d\n", $i);
 
     open (IN, "-|", @command, "--runtime", 1);
     close (IN);
@@ -497,6 +681,16 @@ for my $hash_type (@hash_types)
   open (OUT, ">>", $result) or die;
   print OUT $final_speed, "\n";
   close (OUT);
+
+  my $endTime = time();
+  my $elapsed = $endTime - $startTime;
+
+  my $days    = int($elapsed / 86400);
+  my $hours   = int(($elapsed % 86400) / 3600);
+  my $minutes = int(($elapsed % 3600) / 60);
+  my $seconds = $elapsed % 60;
+
+  printf("\n\n[$workdir] > All tests done in: %d days, %02d hours, %02d minutes, %02d seconds\n", $days, $hours, $minutes, $seconds);
 }
 
 sub get_module
@@ -521,7 +715,7 @@ sub get_module
     {
       if (($hash_type == 22000) || ($hash_type == 22001))
       {
-        ## problem while in -m 2500 backward compatiblity mode
+        ## problem while in -m 2500 backward compatibility mode
       }
       else
       {
@@ -552,7 +746,7 @@ sub get_module
 
   close (IN);
 
-  my $mask = (defined $benchmark_mask) ? $benchmark_mask : $default_mask;
+  my $mask = $default_mask;
 
   if ($pw_min != -1)
   {
@@ -574,6 +768,8 @@ sub get_module
       $mask = substr ($mask, 0, $pw_min * 2);
     }
   }
+
+  $mask = (defined $benchmark_mask) ? $benchmark_mask : $mask;
 
   my $module =
   {

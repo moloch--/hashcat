@@ -10,7 +10,7 @@ use warnings;
 
 use Digest::MD4 qw (md4 md4_hex);
 use Digest::MD5 qw (md5 md5_hex);
-use Text::Iconv;
+use Encode;
 
 sub module_constraints { [[0, 256], [96, 96], [0, 27], [96, 96], [-1, -1]] }
 
@@ -21,9 +21,9 @@ sub module_generate_hash
 
   my $salt_bin = pack ("H*", $salt);
 
-  my $converter = Text::Iconv->new('utf8', 'UTF-16LE');
+  my $utf16le = encode("UTF-16LE", $word);
 
-  my $digest = md5_hex (md4 ($converter->convert ($word)) . $salt_bin);
+  my $digest = md5_hex (md4 ($utf16le) . $salt_bin);
 
   my $hash = sprintf ('$sntp-ms$%s$%s', $digest, unpack ("H*", $salt_bin));
 

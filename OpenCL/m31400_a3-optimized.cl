@@ -28,7 +28,6 @@ DECLSPEC void shift_buffer_by_offset (PRIVATE_AS u32 *w0, const u32 offset)
 {
   const int offset_switch = offset / 4;
 
-  #if ((defined IS_AMD || defined IS_HIP) && HAS_VPERM == 0) || defined IS_GENERIC
   switch (offset_switch)
   {
     case 0:
@@ -66,56 +65,6 @@ DECLSPEC void shift_buffer_by_offset (PRIVATE_AS u32 *w0, const u32 offset)
       w0[0] = 0;
       break;
   }
-  #endif
-
-  #if ((defined IS_AMD || defined IS_HIP) && HAS_VPERM == 1) || defined IS_NV
-
-  #if defined IS_NV
-  const int selector = (0x76543210 >> ((offset & 3) * 4)) & 0xffff;
-  #endif
-
-  #if (defined IS_AMD || defined IS_HIP)
-  const int selector = l32_from_64_S(0x0706050403020100UL >> ((offset & 3) * 8));
-  #endif
-
-  switch (offset_switch)
-  {
-    case 0:
-      w0[3] = hc_byte_perm_S (w0[3], w0[2], selector);
-      w0[2] = hc_byte_perm_S (w0[2], w0[1], selector);
-      w0[1] = hc_byte_perm_S (w0[1], w0[0], selector);
-      w0[0] = hc_byte_perm_S (w0[0],     0, selector);
-      break;
-
-    case 1:
-      w0[3] = hc_byte_perm_S (w0[2], w0[1], selector);
-      w0[2] = hc_byte_perm_S (w0[1], w0[0], selector);
-      w0[1] = hc_byte_perm_S (w0[0],     0, selector);
-      w0[0] = 0;
-      break;
-
-    case 2:
-      w0[3] = hc_byte_perm_S (w0[1], w0[0], selector);
-      w0[2] = hc_byte_perm_S (w0[0],     0, selector);
-      w0[1] = 0;
-      w0[0] = 0;
-      break;
-
-    case 3:
-      w0[3] = hc_byte_perm_S (w0[0],     0, selector);
-      w0[2] = 0;
-      w0[1] = 0;
-      w0[0] = 0;
-      break;
-
-    default:
-      w0[3] = 0;
-      w0[2] = 0;
-      w0[1] = 0;
-      w0[0] = 0;
-      break;
-  }
-  #endif
 }
 
 DECLSPEC void aes256_scrt_format (PRIVATE_AS u32 *aes_ks, PRIVATE_AS u32 *pw, const u32 pw_len, PRIVATE_AS u32 *hash, PRIVATE_AS u32 *out, SHM_TYPE u32 *s_te0, SHM_TYPE u32 *s_te1, SHM_TYPE u32 *s_te2, SHM_TYPE u32 *s_te3, SHM_TYPE u32 *s_te4)
@@ -478,7 +427,7 @@ DECLSPEC void m31400m (SHM_TYPE u32a *s_te0, SHM_TYPE u32a *s_te1, SHM_TYPE u32a
   }
 }
 
-KERNEL_FQ void m31400_m04 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
+KERNEL_FQ KERNEL_FA void m31400_m04 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
 {
   /**
    * base
@@ -551,7 +500,7 @@ KERNEL_FQ void m31400_m04 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
   m31400m (s_te0, s_te1, s_te2, s_te3, s_te4, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, kernel_param, gid, lid, lsz);
 }
 
-KERNEL_FQ void m31400_m08 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
+KERNEL_FQ KERNEL_FA void m31400_m08 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
 {
   /**
    * base
@@ -624,7 +573,7 @@ KERNEL_FQ void m31400_m08 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
   m31400m (s_te0, s_te1, s_te2, s_te3, s_te4, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, kernel_param, gid, lid, lsz);
 }
 
-KERNEL_FQ void m31400_m16 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
+KERNEL_FQ KERNEL_FA void m31400_m16 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
 {
   /**
    * base
@@ -885,7 +834,7 @@ DECLSPEC void m31400s (SHM_TYPE u32a *s_te0, SHM_TYPE u32a *s_te1, SHM_TYPE u32a
   }
 }
 
-KERNEL_FQ void m31400_s04 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
+KERNEL_FQ KERNEL_FA void m31400_s04 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
 {
   /**
    * base
@@ -957,7 +906,7 @@ KERNEL_FQ void m31400_s04 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
   m31400s (s_te0, s_te1, s_te2, s_te3, s_te4, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, kernel_param, gid, lid, lsz);
 }
 
-KERNEL_FQ void m31400_s08 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
+KERNEL_FQ KERNEL_FA void m31400_s08 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
 {
   /**
    * base
@@ -1030,7 +979,7 @@ KERNEL_FQ void m31400_s08 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
   m31400s (s_te0, s_te1, s_te2, s_te3, s_te4, w, pw_len, pws, rules_buf, combs_buf, words_buf_r, tmps, hooks, bitmaps_buf_s1_a, bitmaps_buf_s1_b, bitmaps_buf_s1_c, bitmaps_buf_s1_d, bitmaps_buf_s2_a, bitmaps_buf_s2_b, bitmaps_buf_s2_c, bitmaps_buf_s2_d, plains_buf, digests_buf, hashes_shown, salt_bufs, esalt_bufs, d_return_buf, d_extra0_buf, d_extra1_buf, d_extra2_buf, d_extra3_buf, kernel_param, gid, lid, lsz);
 }
 
-KERNEL_FQ void m31400_s16 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
+KERNEL_FQ KERNEL_FA void m31400_s16 (KERN_ATTR_VECTOR_ESALT (scrtv2_t))
 {
   /**
    * base

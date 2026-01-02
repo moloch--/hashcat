@@ -67,25 +67,82 @@ void hcfree (void *ptr)
   free (ptr);
 }
 
-void *hcmalloc_aligned (const size_t sz, const int align)
+void *hc_alloc_aligned (size_t alignment, size_t size)
 {
-  // store the original allocated address so we can later use it to free the memory
-  // this is convinient to use because we don't need to store two memory addresses
+  void *ptr = NULL;
 
-  const int align1 = align - 1;
+  #if defined (__linux__)   || defined (__APPLE__)     || defined (__OpenBSD__) || defined (__NetBSD__) || \
+      defined (__FreeBSD__) || defined (__DragonFly__) || defined (__CYGWIN__)  || defined (__MSYS__)
 
-  void *ptr1 = hcmalloc (sz + sizeof (void *) + align1);
+  if (posix_memalign (&ptr, alignment, size) != 0)
+  {
+    fprintf (stderr, "! hc_aligned_alloc: %s\n", MSG_ENOMEM);
 
-  void *ptr2 = (void **) ((uintptr_t) (ptr1 + sizeof (void *) + align1) & ~align1);
+    return NULL;
+  }
 
-  ((void **) ptr2)[-1] = ptr1;
+  #elif defined (_WIN)
 
-  return ptr2;
+  ptr = _aligned_malloc (size, alignment);
+
+  if (ptr == NULL)
+  {
+    fprintf (stderr, "! hc_aligned_alloc: %s\n", MSG_ENOMEM);
+
+    return NULL;
+  }
+
+  #else
+
+  #error "Platform not supported for aligned allocation"
+
+  #endif
+
+  memset (ptr, 0, size);
+
+  return ptr;
 }
 
-void hcfree_aligned (void *ptr)
+void hc_free_aligned (void **ptr)
 {
-  if (ptr == NULL) return;
+  if (ptr == NULL || *ptr == NULL) return;
 
-  free (((void **) ptr)[-1]);
+  #if defined (_WIN)
+
+  _aligned_free (*ptr);
+
+  #else
+
+  free (*ptr);
+
+  #endif
+
+  *ptr = NULL;
+}
+
+void *hcmalloc_bridge_aligned (const size_t sz, const int align)
+{
+  uintptr_t align_mask = (uintptr_t) (align - 1);
+
+  void *raw = malloc (sz + align + sizeof (void *));
+
+  if (raw == NULL) return NULL;
+
+  uintptr_t raw_addr = (uintptr_t) raw + sizeof (void *);
+
+  uintptr_t aligned_addr = (raw_addr + align_mask) & ~align_mask;
+
+  void **aligned_ptr = (void **) aligned_addr;
+
+  aligned_ptr[-1] = raw;
+
+  return aligned_ptr;
+}
+
+void hcfree_bridge_aligned (void *ptr)
+{
+  if (ptr != NULL)
+  {
+    free (((void **) ptr)[-1]);
+  }
 }

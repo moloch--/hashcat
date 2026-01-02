@@ -10,8 +10,43 @@ use warnings;
 
 use Crypt::PBKDF2;
 use MIME::Base64 qw (encode_base64 decode_base64);
+use Digest::HMAC qw(hmac);
+use Digest::MD5 qw(md5);
 
 sub module_constraints { [[0, 256], [1, 15], [-1, -1], [-1, -1], [-1, -1]] }
+
+sub pbkdf2_md5
+{
+  my ($password, $salt, $iterations, $key_length) = @_;
+  $iterations  ||= 1000;
+  $key_length  ||= 32;
+
+  my $hash_length = 16;  # MD5 outputs 16 bytes
+  my $block_count = int( ($key_length + $hash_length - 1) / $hash_length );
+
+  my $output = '';
+
+  for my $i (1 .. $block_count)
+  {
+    # pack N = big endian 32-bit
+    my $block_index = pack('N', $i);
+
+    # Initial U1 = HMAC(password, salt || block_index)
+    my $u = hmac($salt . $block_index, $password, \&md5);
+
+    my $t = $u;
+
+    for (my $j = 1; $j < $iterations; $j++)
+    {
+      $u = hmac($u, $password, \&md5);
+      $t ^= $u;
+    }
+
+    $output .= $t;
+  }
+
+  return substr($output, 0, $key_length);
+}
 
 sub module_generate_hash
 {
@@ -20,98 +55,15 @@ sub module_generate_hash
   my $iterations = shift // 1000;
   my $out_len    = shift // 32;
 
-  #
-  # call PHP here - WTF
-  #
+  # Generate derived key (binary)
+  my $derived_key = pbkdf2_md5($word, $salt, $iterations, $out_len);
 
-  # sanitize $word_buf and $salt_buf:
+  # base64 encode salt and derived key
+  my $base64_salt = encode_base64($salt, '');
+  my $base64_key  = encode_base64($derived_key, '');
 
-  my $word_buf_base64 = encode_base64 ($word, "");
-  my $salt_buf_base64 = encode_base64 ($salt, "");
-
-  # sanitize lenghs
-
-  $out_len = int ($out_len);
-
-  # output is in hex encoding, otherwise it could be screwed (but shouldn't)
-
-  my $php_code = <<'END_CODE';
-
-  function pbkdf2 ($algorithm, $password, $salt, $count, $key_length, $raw_output = false)
-  {
-      $algorithm = strtolower ($algorithm);
-
-      if (! in_array ($algorithm, hash_algos (), true))
-      {
-        trigger_error ("PBKDF2 ERROR: Invalid hash algorithm.", E_USER_ERROR);
-      }
-
-      if ($count <= 0 || $key_length <= 0)
-      {
-        trigger_error ("PBKDF2 ERROR: Invalid parameters.", E_USER_ERROR);
-      }
-
-      if (function_exists ("hash_pbkdf2"))
-      {
-        if (!$raw_output)
-        {
-            $key_length = $key_length * 2;
-        }
-
-        return hash_pbkdf2 ($algorithm, $password, $salt, $count, $key_length, $raw_output);
-      }
-
-      $hash_length = strlen (hash ($algorithm, "", true));
-      $block_count = ceil ($key_length / $hash_length);
-
-      $output = "";
-
-      for ($i = 1; $i <= $block_count; $i++)
-      {
-        $last = $salt . pack ("N", $i);
-
-        $last = $xorsum = hash_hmac ($algorithm, $last, $password, true);
-
-        for ($j = 1; $j < $count; $j++)
-        {
-          $xorsum ^= ($last = hash_hmac ($algorithm, $last, $password, true));
-        }
-
-        $output .= $xorsum;
-      }
-
-      if ($raw_output)
-      {
-        return substr ($output, 0, $key_length);
-      }
-      else
-      {
-        return bin2hex (substr ($output, 0, $key_length));
-      }
-  }
-
-  print pbkdf2 ("md5", base64_decode ("$word_buf_base64"), base64_decode ("$salt_buf_base64"), $iterations, $out_len, False);
-
-END_CODE
-
-  # replace with these command line arguments
-
-  $php_code =~ s/\$word_buf_base64/$word_buf_base64/;
-  $php_code =~ s/\$salt_buf_base64/$salt_buf_base64/;
-  $php_code =~ s/\$iterations/$iterations/;
-  $php_code =~ s/\$out_len/$out_len/;
-
-  my $php_output = `php -r '$php_code'`;
-
-  my $hash_buf = pack ("H*", $php_output);
-
-  $hash_buf = encode_base64 ($hash_buf, "");
-
-  my $base64_salt_buf = encode_base64 ($salt, "");
-
-  my $hash = sprintf ("md5:%i:%s:%s", $iterations, $base64_salt_buf, $hash_buf);
-
-  return $hash;
+  # Format output string
+  return sprintf("md5:%d:%s:%s", $iterations, $base64_salt, $base64_key);
 }
 
 sub module_verify_hash

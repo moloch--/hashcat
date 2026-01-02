@@ -48,6 +48,11 @@ u32         module_salt_type      (MAYBE_UNUSED const hashconfig_t *hashconfig, 
 const char *module_st_hash        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_HASH;         }
 const char *module_st_pass        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_PASS;         }
 
+const char *module_usage_notice (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
+{
+  return "You can use https://github.com/philsmd/7z2hashcat to extract the hashes";
+}
+
 typedef struct seven_zip_tmp
 {
   u32 h[8];
@@ -185,13 +190,13 @@ void module_hook23 (hc_device_param_t *device_param, MAYBE_UNUSED const void *ho
 {
   seven_zip_hook_t *hook_items = (seven_zip_hook_t *) device_param->hooks_buf;
 
-  seven_zip_hook_salt_t *seven_zips = (seven_zip_hook_salt_t *) hook_salts_buf;
-  seven_zip_hook_salt_t *seven_zip  = &seven_zips[salt_pos];
+  const seven_zip_hook_salt_t *seven_zips = (const seven_zip_hook_salt_t *) hook_salts_buf;
+  const seven_zip_hook_salt_t *seven_zip  = &seven_zips[salt_pos];
 
-  seven_zip_hook_extra_t *seven_zip_hook_extra = (seven_zip_hook_extra_t *) hook_extra_param;
+  const seven_zip_hook_extra_t *seven_zip_hook_extra = (const seven_zip_hook_extra_t *) hook_extra_param;
 
   u8   data_type   = seven_zip->data_type;
-  u32 *data_buf    = seven_zip->data_buf;
+  const u32 *data_buf    = seven_zip->data_buf;
   u32  unpack_size = seven_zip->unpack_size;
 
   // this hook data needs to be updated (the "hook_success" variable):
@@ -286,7 +291,7 @@ void module_hook23 (hc_device_param_t *device_param, MAYBE_UNUSED const void *ho
   {
     u32 crc_len = seven_zip->crc_len;
 
-    char *coder_attributes = seven_zip->coder_attributes;
+    const char *coder_attributes = seven_zip->coder_attributes;
 
     // input buffers and length
 
@@ -657,7 +662,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
     for (u32 i = 0, j = 0; j < coder_attributes_len; i += 1, j += 2)
     {
-      seven_zip->coder_attributes[i] = hex_to_u8 ((const u8 *) &coder_attributes_pos[j]);
+      seven_zip->coder_attributes[i] = hex_to_u8 (&coder_attributes_pos[j]);
 
       seven_zip->coder_attributes_len++;
     }
@@ -716,7 +721,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
 int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const void *digest_buf, MAYBE_UNUSED const salt_t *salt, MAYBE_UNUSED const void *esalt_buf, MAYBE_UNUSED const void *hook_salt_buf, MAYBE_UNUSED const hashinfo_t *hash_info, char *line_buf, MAYBE_UNUSED const int line_size)
 {
-  seven_zip_hook_salt_t *seven_zip = (seven_zip_hook_salt_t *) hook_salt_buf;
+  const seven_zip_hook_salt_t *seven_zip = (const seven_zip_hook_salt_t *) hook_salt_buf;
 
   const u32 data_len = seven_zip->data_len;
 
@@ -752,7 +757,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     salt->salt_sign[0],
     cost,
     seven_zip->salt_len,
-    (char *) seven_zip->salt_buf,
+    (const char *) seven_zip->salt_buf,
     iv_len,
     iv[0],
     iv[1],
@@ -791,9 +796,12 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
+  module_ctx->module_usage_notice             = module_usage_notice;
   module_ctx->module_dgst_pos0                = module_dgst_pos0;
   module_ctx->module_dgst_pos1                = module_dgst_pos1;
   module_ctx->module_dgst_pos2                = module_dgst_pos2;

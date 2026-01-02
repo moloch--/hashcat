@@ -308,6 +308,9 @@ void slow_candidates_next (hashcat_ctx_t *hashcat_ctx, void *extra_info)
         const int rule_len_out = _old_apply_rule (user_options->rule_buf_r, (int) user_options_extra->rule_len_r, line_buf, (int) line_len, rule_buf_out);
 
         if (rule_len_out < 0) continue;
+
+        line_buf = rule_buf_out;
+        line_len = (u32) rule_len_out;
       }
 
       break;

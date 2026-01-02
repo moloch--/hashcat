@@ -11,7 +11,11 @@
 
 #define OUTFILES_DIR "outfiles"
 
+#if defined (_WIN32) || defined (__WIN32__)
+HC_API_CALL DWORD thread_outfile_remove (void *p);
+#else
 HC_API_CALL void *thread_outfile_remove (void *p);
+#endif
 
 int  outcheck_ctx_init    (hashcat_ctx_t *hashcat_ctx);
 void outcheck_ctx_destroy (hashcat_ctx_t *hashcat_ctx);

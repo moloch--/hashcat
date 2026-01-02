@@ -1,6 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Utility to extract Bitwarden hash for hashcat from Google Chrome / Firefox / Desktop local data"""
 
+#
+# Script to extract the hash for use with hashcat mode 23400.
 #
 # Based on bitwarden2john.py https://github.com/willstruggle/john/blob/master/bitwarden2john.py
 #

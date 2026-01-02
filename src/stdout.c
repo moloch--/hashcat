@@ -12,6 +12,7 @@
 #include "mpsp.h"
 #include "backend.h"
 #include "shared.h"
+#include "thread.h"
 #include "stdout.h"
 
 static void out_flush (out_t *out)
@@ -59,6 +60,10 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
   straight_ctx_t   *straight_ctx   = hashcat_ctx->straight_ctx;
   user_options_t   *user_options   = hashcat_ctx->user_options;
 
+  // prevent wrong candidates in output when backend_ctx->backend_devices_active > 1
+
+  hc_thread_mutex_lock (outfile_ctx->mux_outfile);
+
   char *filename = outfile_ctx->filename;
 
   out_t out;
@@ -69,6 +74,8 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
     {
       event_log_error (hashcat_ctx, "%s: %s", filename, strerror (errno));
 
+      hc_thread_mutex_unlock (outfile_ctx->mux_outfile);
+
       return -1;
     }
 
@@ -77,6 +84,8 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
       hc_fclose (&out.fp);
 
       event_log_error (hashcat_ctx, "%s: %s", filename, strerror (errno));
+
+      hc_thread_mutex_unlock (outfile_ctx->mux_outfile);
 
       return -1;
     }
@@ -195,7 +204,7 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
       if (rc == -1) break;
 
-      if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
+      if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_GENERIC) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
       {
         while (pw_idx <= pw_idx_last)
         {
@@ -203,7 +212,7 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
           for (u32 il_pos = 0; il_pos < il_cnt; il_pos++)
           {
-            const u32 off = device_param->innerloop_pos + il_pos;
+            const u64 off = device_param->innerloop_pos + il_pos;
 
             for (u32 i = 0; i < pw_idx->cnt; i++)
             {
@@ -340,6 +349,8 @@ int process_stdout (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param,
 
     hc_fclose (&out.fp);
   }
+
+  hc_thread_mutex_unlock (outfile_ctx->mux_outfile);
 
   return rc;
 }

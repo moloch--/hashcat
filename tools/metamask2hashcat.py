@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Author: Gabriele 'matrix' Gristina
-# Version: 2.0
-# Date: Thu 12 Aug 2021 06:44:14 PM CEST
+# Version: 2.1
+# Date: Thu 28 Aug 2023 05:12:40 PM CEST
 # License: MIT
 
 # Extract metamask vault from browser and save to file, then you can use this tool
@@ -51,7 +51,13 @@ def metamask_parser(file, shortdata):
         parser.print_help()
         exit(1)
 
+
     if isMobile is False:
+
+      try:
+        iter_count = j['keyMetadata']['params']['iterations']
+      except KeyError:
+        iter_count = 10_000
 
       if((len(j['data']) > 3000) or shortdata):
         data_bin = base64.b64decode(j['data'])
@@ -60,16 +66,22 @@ def metamask_parser(file, shortdata):
         #  Still the pbkdf 10k iter will be taking the most time by far probably.
         j['data'] = base64.b64encode(data_bin[0:64]).decode("ascii")
 
-        print('$metamask-short$' + j['salt'] + '$' + j['iv'] + '$' + j['data'])
+        if iter_count != 10000:
+          print('$metamask-short$rounds=' + str(iter_count) + '$' + j['salt'] + '$' + j['iv'] + '$' + j['data'])
+        else:
+          print('$metamask-short$' + j['salt'] + '$' + j['iv'] + '$' + j['data'])
       else:
-        print('$metamask$' + j['salt'] + '$' + j['iv'] + '$' + j['data'])
+        if iter_count != 10000:
+          print('$metamask$rounds=' + str(iter_count) + '$' + j['salt'] + '$' + j['iv'] + '$' + j['data'])
+        else:
+          print('$metamask$' + j['salt'] + '$' + j['iv'] + '$' + j['data'])
 
     else:
 
-      # extract only first 16 bytes of ciphertext
+      # extract first 32 bytes of ciphertext for enhanced resistance to false-positives
 
       cipher_bin = base64.b64decode(j['cipher'])
-      j['cipher'] = base64.b64encode(cipher_bin[:16]).decode("ascii")
+      j['cipher'] = base64.b64encode(cipher_bin[:32]).decode("ascii")
 
       print('$metamaskMobile$' + j['salt'] + '$' + j['iv'] + '$' + j['cipher'])
 

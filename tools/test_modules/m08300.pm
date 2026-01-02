@@ -11,21 +11,22 @@ use warnings;
 use Net::DNS::RR::NSEC3;
 use Net::DNS::SEC;
 
-# we need to restict the pure password length for the test module to 63 bytes,
+# we need to restrict the pure password length for the test module to 63 bytes,
 # because we can't have any string (including the pass) of over 63 bytes without "."
 
-# sub module_constraints { [[1, 256], [-1, -1], [1, 55], [-1, -1], [-1, -1]] }
-sub module_constraints { [[1, 63], [-1, -1], [1, 55], [-1, -1], [-1, -1]] }
+sub module_constraints { [[1, 63], [1, 63], [1, 32], [1, 24], [1, 44]] }
 
 sub get_random_dnssec_salt
 {
+  my $domain = shift;
+
   my $salt_buf = "";
 
   $salt_buf .= ".";
 
-  $salt_buf .= random_lowercase_string (8);
+  $salt_buf .= $domain;
 
-  $salt_buf .= ".net";
+  #$salt_buf .= ".net";
 
   $salt_buf .= ":";
 
@@ -40,19 +41,9 @@ sub module_generate_hash
   my $salt = shift;
   my $iter = shift // 1;
 
-  if (length $salt == 0)
-  {
-    if (int (rand (10)) == 0)
-    {
-      $salt = ":";
-    }
-    else
-    {
-      $salt = get_random_dnssec_salt ();
-    }
-  }
+  my $combined_salt = get_random_dnssec_salt ($salt);
 
-  my ($domain, $salt_hex) = split (":", $salt);
+  my ($domain, $salt_hex) = split (":", $combined_salt);
 
   my $hashalg = Net::DNS::SEC->digtype ("SHA1");
 

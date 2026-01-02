@@ -37,6 +37,99 @@ typedef union
 
 } cl_device_topology_amd;
 
+// OpenCL extras
+
+typedef enum openclBufferMemoryFlagsId
+{
+  opencl_d_pws_buf_memoryFlags,
+  opencl_d_pws_amp_buf_memoryFlags,
+  opencl_d_pws_comp_buf_memoryFlags,
+  opencl_d_pws_idx_memoryFlags,
+  opencl_d_rules_memoryFlags,
+  opencl_d_rules_c_memoryFlags,
+  opencl_d_combs_memoryFlags,
+  opencl_d_combs_c_memoryFlags,
+  opencl_d_bfs_memoryFlags,
+  opencl_d_bfs_c_memoryFlags,
+  opencl_d_tm_c_memoryFlags,
+  opencl_d_bitmap_s1_a_memoryFlags,
+  opencl_d_bitmap_s1_b_memoryFlags,
+  opencl_d_bitmap_s1_c_memoryFlags,
+  opencl_d_bitmap_s1_d_memoryFlags,
+  opencl_d_bitmap_s2_a_memoryFlags,
+  opencl_d_bitmap_s2_b_memoryFlags,
+  opencl_d_bitmap_s2_c_memoryFlags,
+  opencl_d_bitmap_s2_d_memoryFlags,
+  opencl_d_plain_bufs_memoryFlags,
+  opencl_d_digests_buf_memoryFlags,
+  opencl_d_digests_shown_memoryFlags,
+  opencl_d_salt_bufs_memoryFlags,
+  opencl_d_esalt_bufs_memoryFlags,
+  opencl_d_tmps_memoryFlags,
+  opencl_d_hooks_memoryFlags,
+  opencl_d_result_memoryFlags,
+  opencl_d_extra0_buf_memoryFlags,
+  opencl_d_extra1_buf_memoryFlags,
+  opencl_d_extra2_buf_memoryFlags,
+  opencl_d_extra3_buf_memoryFlags,
+  opencl_d_root_css_buf_memoryFlags,
+  opencl_d_markov_css_buf_memoryFlags,
+  opencl_d_st_digests_buf_memoryFlags,
+  opencl_d_st_salts_buf_memoryFlags,
+  opencl_d_st_esalts_buf_memoryFlags,
+  opencl_d_kernel_param_memoryFlags,
+  OCL_BUFFER_CNT
+
+} openclBufferMemoryFlagsId_t;
+
+static const cl_mem_flags openclMemoryFlags[OCL_BUFFER_CNT] =
+{
+  [opencl_d_pws_buf_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_pws_amp_buf_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_pws_comp_buf_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_pws_idx_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_rules_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_rules_c_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_combs_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_combs_c_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bfs_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bfs_c_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_tm_c_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s1_a_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s1_b_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s1_c_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s1_d_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s2_a_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s2_b_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s2_c_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_bitmap_s2_d_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_plain_bufs_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_digests_buf_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_digests_shown_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_salt_bufs_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_esalt_bufs_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_tmps_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_hooks_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_result_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_extra0_buf_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_extra1_buf_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_extra2_buf_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_extra3_buf_memoryFlags] = CL_MEM_READ_WRITE,
+  [opencl_d_root_css_buf_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_markov_css_buf_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_st_digests_buf_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_st_salts_buf_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_st_esalts_buf_memoryFlags] = CL_MEM_READ_ONLY,
+  [opencl_d_kernel_param_memoryFlags] = CL_MEM_READ_ONLY
+};
+
+#define HC_OCL_CREATEBUFFER(ctx, size, ptr, buf_name)                                     \
+  do {                                                                                    \
+    if (hc_clCreateBuffer_ext(ctx, device_param->opencl_context,                          \
+                              openclMemoryFlags[opencl_d_##buf_name##_memoryFlags], size, \
+                              ptr, &device_param->opencl_d_##buf_name) == -1) return -1;  \
+  } while (0)
+
 #define CL_PLATFORMS_MAX 16
 
 typedef cl_int           (CL_API_CALL *OCL_CLBUILDPROGRAM)            (cl_program, cl_uint, const cl_device_id *, const char *, void (CL_CALLBACK *)(cl_program, void *), void *);
@@ -51,7 +144,7 @@ typedef cl_int           (CL_API_CALL *OCL_CLENQUEUEFILLBUFFER)       (cl_comman
 typedef cl_int           (CL_API_CALL *OCL_CLENQUEUECOPYBUFFER)       (cl_command_queue, cl_mem, cl_mem, size_t, size_t, size_t, cl_uint, const cl_event *, cl_event *);
 typedef void *           (CL_API_CALL *OCL_CLENQUEUEMAPBUFFER)        (cl_command_queue, cl_mem, cl_bool, cl_map_flags, size_t, size_t, cl_uint, const cl_event *, cl_event *, cl_int *);
 typedef cl_int           (CL_API_CALL *OCL_CLENQUEUENDRANGEKERNEL)    (cl_command_queue, cl_kernel, cl_uint, const size_t *, const size_t *, const size_t *, cl_uint, const cl_event *, cl_event *);
-typedef cl_int           (CL_API_CALL *OCL_CLENQUEUEREADBUFFER)       (cl_command_queue, cl_mem, cl_bool, size_t, size_t, const void *, cl_uint, const cl_event *, cl_event *);
+typedef cl_int           (CL_API_CALL *OCL_CLENQUEUEREADBUFFER)       (cl_command_queue, cl_mem, cl_bool, size_t, size_t, void *, cl_uint, const cl_event *, cl_event *);
 typedef cl_int           (CL_API_CALL *OCL_CLENQUEUEUNMAPMEMOBJECT)   (cl_command_queue, cl_mem, void *, cl_uint, const cl_event *, cl_event *);
 typedef cl_int           (CL_API_CALL *OCL_CLENQUEUEWRITEBUFFER)      (cl_command_queue, cl_mem, cl_bool, size_t, size_t, const void *, cl_uint, const cl_event *, cl_event *);
 typedef cl_int           (CL_API_CALL *OCL_CLFINISH)                  (cl_command_queue);
@@ -126,6 +219,10 @@ const char *val2cstr_cl          (cl_int CL_err);
 int  ocl_init                    (void *hashcat_ctx);
 void ocl_close                   (void *hashcat_ctx);
 
+int hc_clReleaseMemObjectPtr     (void *hashcat_ctx, cl_mem *mem);
+int hc_clReleaseKernelPtr        (void *hashcat_ctx, cl_kernel *kernel);
+int hc_clReleaseProgramPtr       (void *hashcat_ctx, cl_program *program);
+
 int hc_clEnqueueNDRangeKernel    (void *hashcat_ctx, cl_command_queue command_queue, cl_kernel kernel, cl_uint work_dim, const size_t *global_work_offset, const size_t *global_work_size, const size_t *local_work_size, cl_uint num_events_in_wait_list, const cl_event *event_wait_list, cl_event *event);
 int hc_clGetEventInfo            (void *hashcat_ctx, cl_event event, cl_event_info param_name, size_t param_value_size, void *param_value, size_t *param_value_size_ret);
 int hc_clFlush                   (void *hashcat_ctx, cl_command_queue command_queue);
@@ -142,6 +239,7 @@ int hc_clGetDeviceInfo           (void *hashcat_ctx, cl_device_id device, cl_dev
 int hc_clCreateContext           (void *hashcat_ctx, const cl_context_properties *properties, cl_uint num_devices, const cl_device_id *devices, void (CL_CALLBACK *pfn_notify) (const char *errinfo, const void *private_info, size_t cb, void *user_data), void *user_data, cl_context *context);
 int hc_clCreateCommandQueue      (void *hashcat_ctx, cl_context context, cl_device_id device, cl_command_queue_properties properties, cl_command_queue *command_queue);
 int hc_clCreateBuffer            (void *hashcat_ctx, cl_context context, cl_mem_flags flags, size_t size, void *host_ptr, cl_mem *mem);
+int hc_clCreateBuffer_ext        (void *hashcat_ctx, cl_context context, cl_mem_flags flags, size_t size, void *host_ptr, cl_mem *mem);
 int hc_clCreateProgramWithSource (void *hashcat_ctx, cl_context context, cl_uint count, const char **strings, const size_t *lengths, cl_program *program);
 int hc_clCreateProgramWithBinary (void *hashcat_ctx, cl_context context, cl_uint num_devices, const cl_device_id *device_list, const size_t *lengths, const unsigned char **binaries, cl_int *binary_status, cl_program *program);
 int hc_clBuildProgram            (void *hashcat_ctx, cl_program program, cl_uint num_devices, const cl_device_id *device_list, const char *options, void (CL_CALLBACK *pfn_notify) (cl_program program, void *user_data), void *user_data);

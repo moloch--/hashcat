@@ -24,7 +24,7 @@ sub aes_encrypt
 
   my $python_code = <<'END_CODE';
 
-from CryptoPlus.Cipher import AES
+from CryptoPlus.Cipher import python_AES
 import base64
 
 key1 = base64.b64decode (key_main)
@@ -32,7 +32,7 @@ key2 = base64.b64decode (key_tweak)
 
 key = (key1, key2)
 
-cipher = AES.new (key, AES.MODE_XTS)
+cipher = python_AES.new (key, python_AES.MODE_XTS)
 
 sequence = b"\x01"
 
@@ -67,7 +67,7 @@ sub aes_decrypt
 
   my $python_code = <<'END_CODE';
 
-from CryptoPlus.Cipher import AES
+from CryptoPlus.Cipher import python_AES
 import base64
 
 key1 = base64.b64decode (key_main)
@@ -75,7 +75,7 @@ key2 = base64.b64decode (key_tweak)
 
 key = (key1, key2)
 
-cipher = AES.new (key, AES.MODE_XTS)
+cipher = python_AES.new (key, python_AES.MODE_XTS)
 
 sequence = b"\x01"
 

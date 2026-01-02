@@ -87,3 +87,18 @@ This is a trade-off game.
 
 The upper limit of maximum 36 positions for various rule functions (0-9, A-Z) was a design decision by the original authors of the rule engine.
 
+##
+## Known Issue: Unreleased memory after register spilling
+##
+
+When a kernel requires more registers than the hardware can provide,
+the CUDA runtime automatically spills register data into global memory.
+After the kernel finishes, this reserved memory is not released by the CUDA runtime.
+The only way to free it is to destroy the CUDA context.
+
+In normal runs this has no impact, since the context is destroyed at program exit.
+
+In benchmarks, however, where the same context is kept across multiple hash-mode tests,
+available device memory decreases over time. This has a negative impact on benchmark
+performance and can lead to runtime errors.
+

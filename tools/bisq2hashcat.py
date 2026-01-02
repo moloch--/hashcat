@@ -1,4 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+
+# Script to extract the hash from a bisq .wallet file for use with hashcat mode 29800.
 
 # This software is Copyright (c) 2017, Dhiru Kholia <dhiru.kholia at gmail.com>
 # and it is hereby released under GPL v2 license.
@@ -17,6 +19,8 @@
 # Author:
 #   https://github.com/Banaanhangwagen
 # License: MIT
+
+
 
 import os
 import sys

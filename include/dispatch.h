@@ -8,7 +8,7 @@
 
 #ifdef WITH_BRAIN
 #if defined (_WIN)
-#include <winsock.h>
+#include <winsock2.h>
 #define SEND_FLAGS 0
 #endif
 
@@ -22,7 +22,12 @@
 #endif
 #endif
 
+#if defined (_WIN32) || defined (__WIN32__)
+HC_API_CALL DWORD thread_calc_stdin (void *p);
+HC_API_CALL DWORD thread_calc (void *p);
+#else
 HC_API_CALL void *thread_calc_stdin (void *p);
 HC_API_CALL void *thread_calc (void *p);
+#endif
 
 #endif // HC_DISPATCH_H

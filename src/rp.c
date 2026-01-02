@@ -20,6 +20,7 @@ static const char grp_op_nop[] =
   RULE_OP_MANGLE_LREST_UFIRST,
   RULE_OP_MANGLE_UREST_LFIRST,
   RULE_OP_MANGLE_TREST,
+  RULE_OP_MANGLE_SHIFT_CASE,
   RULE_OP_MANGLE_REVERSE,
   RULE_OP_MANGLE_DUPEWORD,
   RULE_OP_MANGLE_REFLECT,
@@ -31,6 +32,8 @@ static const char grp_op_nop[] =
   RULE_OP_MANGLE_SWITCH_LAST,
   RULE_OP_MANGLE_DUPECHAR_ALL,
   RULE_OP_MANGLE_TITLE,
+  RULE_OP_MANGLE_TO_HEX_LOWER,
+  RULE_OP_MANGLE_TO_HEX_UPPER
 };
 
 static const char grp_op_pos_p0[] =
@@ -71,8 +74,10 @@ static const char grp_op_chr_chr[] =
 static const char grp_op_pos_chr[] =
 {
   RULE_OP_MANGLE_INSERT,
+  RULE_OP_MANGLE_INSERT_EVERY,
   RULE_OP_MANGLE_OVERSTRIKE,
-  RULE_OP_MANGLE_TOGGLE_AT_SEP
+  RULE_OP_MANGLE_TOGGLE_AT_SEP,
+  RULE_OP_MANGLE_CHR_ADD
 };
 
 static const char grp_op_pos_pos0[] =
@@ -104,6 +109,21 @@ bool class_lower (const u8 c)
 bool class_upper (const u8 c)
 {
   return ((c >= 'A') && (c <= 'Z'));
+}
+
+bool class_lower_hex (const u8 c)
+{
+  return ((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f'));
+}
+
+bool class_upper_hex (const u8 c)
+{
+  return ((c >= '0') && (c <= '9')) || ((c >= 'A') && (c <= 'F'));
+}
+
+bool class_sym (const u8 c)
+{
+  return ((c == ' ') || ((c >= '!') && (c <= '/')) || ((c >= ':') && (c <= '@')) || ((c >= '[') && (c <= '`')) || ((c >= '{') && (c <= '~')));
 }
 
 bool class_alpha (const u8 c)
@@ -217,7 +237,7 @@ int generate_random_rule (char rule_buf[RP_RULE_SIZE], const u32 rp_gen_func_min
     }
   }
 
-  return (rule_pos);
+  return rule_pos;
 }
 
 #define INCR_POS if (++rule_pos == rule_len) return (-1)
@@ -281,6 +301,10 @@ int cpu_rule_to_kernel_rule (char *rule_buf, u32 rule_len, kernel_rule_t *rule)
         break;
 
       case RULE_OP_MANGLE_TREST:
+        SET_NAME (rule, rule_buf[rule_pos]);
+        break;
+
+      case RULE_OP_MANGLE_SHIFT_CASE:
         SET_NAME (rule, rule_buf[rule_pos]);
         break;
 
@@ -350,6 +374,12 @@ int cpu_rule_to_kernel_rule (char *rule_buf, u32 rule_len, kernel_rule_t *rule)
         break;
 
       case RULE_OP_MANGLE_INSERT:
+        SET_NAME    (rule, rule_buf[rule_pos]);
+        SET_P0_CONV (rule, rule_buf[rule_pos]);
+        SET_P1      (rule, rule_buf[rule_pos]);
+        break;
+
+      case RULE_OP_MANGLE_INSERT_EVERY:
         SET_NAME    (rule, rule_buf[rule_pos]);
         SET_P0_CONV (rule, rule_buf[rule_pos]);
         SET_P1      (rule, rule_buf[rule_pos]);
@@ -428,6 +458,12 @@ int cpu_rule_to_kernel_rule (char *rule_buf, u32 rule_len, kernel_rule_t *rule)
         SET_P0_CONV (rule, rule_buf[rule_pos]);
         break;
 
+      case RULE_OP_MANGLE_CHR_ADD:
+        SET_NAME    (rule, rule_buf[rule_pos]);
+        SET_P0_CONV (rule, rule_buf[rule_pos]);
+        SET_P1      (rule, rule_buf[rule_pos]);
+        break;
+
       case RULE_OP_MANGLE_REPLACE_NP1:
         SET_NAME    (rule, rule_buf[rule_pos]);
         SET_P0_CONV (rule, rule_buf[rule_pos]);
@@ -461,6 +497,85 @@ int cpu_rule_to_kernel_rule (char *rule_buf, u32 rule_len, kernel_rule_t *rule)
         SET_NAME    (rule, rule_buf[rule_pos]);
         SET_P0_CONV (rule, rule_buf[rule_pos]);
         SET_P1      (rule, rule_buf[rule_pos]);
+        break;
+
+      case RULE_OP_MANGLE_TO_HEX_LOWER:
+        SET_NAME    (rule, rule_buf[rule_pos]);
+        break;
+
+      case RULE_OP_MANGLE_TO_HEX_UPPER:
+        SET_NAME    (rule, rule_buf[rule_pos]);
+        break;
+
+      case RULE_OP_CLASS_BASED: // ~
+        switch (rule_buf[rule_pos+1])
+        {
+          case RULE_OP_MANGLE_REPLACE: // ~s?CY
+            SET_NAME  (rule, RULE_OP_MANGLE_REPLACE_CLASS);
+            INCR_POS;
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            SET_P1    (rule, rule_buf[rule_pos]);
+            break;
+
+          case RULE_OP_MANGLE_PURGECHAR: // ~@?C
+            SET_NAME  (rule, RULE_OP_MANGLE_PURGECHAR_CLASS);
+            INCR_POS;
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            break;
+
+          case RULE_OP_MANGLE_TITLE_SEP: // ~e?C
+            SET_NAME  (rule, RULE_OP_MANGLE_TITLE_SEP_CLASS);
+            INCR_POS;
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            break;
+
+          /*
+          case '!': // ~!?C
+            SET_NAME  (rule, RULE_OP_REJECT_CONTAIN_CLASS);
+            INCR_POS;
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            break;
+          case '/': // ~/?C
+            SET_NAME  (rule, RULE_OP_REJECT_NOT_CONTAIN_CLASS);
+            INCR_POS;
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            break;
+          case '(': // ~(?C
+            SET_NAME  (rule, RULE_OP_REJECT_EQUAL_FIRST_CLASS);
+            INCR_POS;
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            break;
+          case '(': // ~)?C
+            SET_NAME  (rule, RULE_OP_REJECT_EQUAL_LAST_CLASS);
+            INCR_POS;
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            break;
+          case '=': // ~=N?C
+            SET_NAME  (rule, RULE_OP_REJECT_EQUAL_AT_CLASS);
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            INCR_POS;
+            SET_P1    (rule, rule_buf[rule_pos]);
+            break;
+          case '%': // ~%N?C
+            SET_NAME  (rule, RULE_OP_REJECT_CONTAINS_CLASS);
+            INCR_POS;
+            SET_P0    (rule, rule_buf[rule_pos]);
+            INCR_POS;
+            SET_P1    (rule, rule_buf[rule_pos]);
+            break;
+          */
+          default:
+            return -1;
+        }
+
         break;
 
       default:
@@ -510,6 +625,10 @@ int kernel_rule_to_cpu_rule (char *rule_buf, kernel_rule_t *rule)
         break;
 
       case RULE_OP_MANGLE_TREST:
+        rule_buf[rule_pos] = rule_cmd;
+        break;
+
+      case RULE_OP_MANGLE_SHIFT_CASE:
         rule_buf[rule_pos] = rule_cmd;
         break;
 
@@ -579,6 +698,12 @@ int kernel_rule_to_cpu_rule (char *rule_buf, kernel_rule_t *rule)
         break;
 
       case RULE_OP_MANGLE_INSERT:
+        rule_buf[rule_pos] = rule_cmd;
+        GET_P0_CONV (rule);
+        GET_P1      (rule);
+        break;
+
+      case RULE_OP_MANGLE_INSERT_EVERY:
         rule_buf[rule_pos] = rule_cmd;
         GET_P0_CONV (rule);
         GET_P1      (rule);
@@ -657,6 +782,12 @@ int kernel_rule_to_cpu_rule (char *rule_buf, kernel_rule_t *rule)
         GET_P0_CONV (rule);
         break;
 
+      case RULE_OP_MANGLE_CHR_ADD:
+        rule_buf[rule_pos] = rule_cmd;
+        GET_P0_CONV (rule);
+        GET_P1      (rule);
+        break;
+
       case RULE_OP_MANGLE_REPLACE_NP1:
         rule_buf[rule_pos] = rule_cmd;
         GET_P0_CONV (rule);
@@ -690,6 +821,36 @@ int kernel_rule_to_cpu_rule (char *rule_buf, kernel_rule_t *rule)
         rule_buf[rule_pos] = rule_cmd;
         GET_P0_CONV (rule);
         GET_P1      (rule);
+        break;
+
+      case RULE_OP_MANGLE_TO_HEX_LOWER:
+        rule_buf[rule_pos] = rule_cmd;
+        break;
+
+      case RULE_OP_MANGLE_TO_HEX_UPPER:
+        rule_buf[rule_pos] = rule_cmd;
+        break;
+
+      case RULE_OP_MANGLE_REPLACE_CLASS:
+        rule_buf[rule_pos++] = RULE_OP_CLASS_BASED;
+        rule_buf[rule_pos++] = RULE_OP_MANGLE_REPLACE;
+        rule_buf[rule_pos]   = '?';
+        GET_P0 (rule);
+        GET_P1 (rule);
+        break;
+
+      case RULE_OP_MANGLE_PURGECHAR_CLASS:
+        rule_buf[rule_pos++] = RULE_OP_CLASS_BASED;
+        rule_buf[rule_pos++] = RULE_OP_MANGLE_PURGECHAR;
+        rule_buf[rule_pos]   = '?';
+        GET_P0 (rule);
+        break;
+
+      case RULE_OP_MANGLE_TITLE_SEP_CLASS:
+        rule_buf[rule_pos++] = RULE_OP_CLASS_BASED;
+        rule_buf[rule_pos++] = RULE_OP_MANGLE_TITLE_SEP;
+        rule_buf[rule_pos]   = '?';
+        GET_P0 (rule);
         break;
 
       case 0:
@@ -819,15 +980,19 @@ int kernel_rules_load (hashcat_ctx_t *hashcat_ctx, kernel_rule_t **out_buf, u32 
 
       if (result == -1)
       {
-        event_log_warning (hashcat_ctx, "Skipping invalid or unsupported rule in file %s on line %u: %s", rp_file, rule_line, rule_buf);
-
+        if (user_options->quiet == false)
+        {
+          event_log_warning (hashcat_ctx, "Skipping invalid or unsupported rule in file %s on line %u: %s", rp_file, rule_line, rule_buf);
+        }
         continue;
       }
 
       if (cpu_rule_to_kernel_rule (rule_buf, rule_len, &kernel_rules_buf[kernel_rules_cnt]) == -1)
       {
-        event_log_warning (hashcat_ctx, "Cannot convert rule for use on OpenCL device in file %s on line %u: %s", rp_file, rule_line, rule_buf);
-
+        if (user_options->quiet == false)
+        {
+          event_log_warning (hashcat_ctx, "Cannot convert rule for use on OpenCL device in file %s on line %u: %s", rp_file, rule_line, rule_buf);
+        }
         memset (&kernel_rules_buf[kernel_rules_cnt], 0, sizeof (kernel_rule_t)); // needs to be cleared otherwise we could have some remaining data
 
         continue;
@@ -906,6 +1071,7 @@ int kernel_rules_load (hashcat_ctx_t *hashcat_ctx, kernel_rule_t **out_buf, u32 
   }
 
   u32 invalid_cnt = 0;
+  u32 valid_cnt = 0;
 
   for (u32 i = 0; i < kernel_rules_cnt; i++)
   {
@@ -924,16 +1090,25 @@ int kernel_rules_load (hashcat_ctx_t *hashcat_ctx, kernel_rule_t **out_buf, u32 
       {
         if (out_pos == RULES_MAX - 1)
         {
-          event_log_warning (hashcat_ctx, "Maximum functions per rule exceeded during chaining of rules, skipping...");
-
           invalid_cnt++;
 
           break;
+        }
+        else
+        {
+          valid_cnt++;
         }
 
         out->cmds[out_pos] = in->cmds[in_pos];
       }
     }
+  }
+
+  if (invalid_cnt > 0)
+  {
+    event_log_warning (hashcat_ctx, "Maximum functions per rule exceeded during chaining of rules.");
+    event_log_warning (hashcat_ctx, "Skipped %u rule chains, %u valid chains remain.", invalid_cnt, valid_cnt);
+    event_log_warning (hashcat_ctx, NULL);
   }
 
   hcfree (repeats);

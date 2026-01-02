@@ -1,5 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+# Script to extract the hash for use with hashcat mode 145xx.
 
 # Author: Gabriele 'matrix' Gristina
 # Version: 1.0

@@ -1,3 +1,5 @@
+.DS_Store
+*/.DS_Store
 *.exe
 *.bin
 *.app
@@ -15,12 +17,34 @@ hashcat.dll
 *.log
 *.out
 *.dSYM
+*.su
 kernels/**
+seekdbs/**
 lib/*.a
+bridges/*.dll
+bridges/*.so
+bridges/subs/*.dll
+bridges/subs/*.so
 modules/*.dll
 modules/*.so
+feeds/*.dll
+feeds/*.so
 obj/*/*/*.o
 obj/*.o
 obj/*.a
 include/CL
 tools/luks_tests
+tools/luks2_tests
+.vscode
+test_edge*
+Rust/feeds/*/target
+Rust/bridges/*/target
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated docs are overwritten anyway
+/docs/hashcat-example_hashes.md
+/docs/hashcat-help.md

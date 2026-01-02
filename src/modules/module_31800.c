@@ -117,16 +117,6 @@ u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED c
   return tmp_size;
 }
 
-u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  // this overrides the reductions of PW_MAX in case optimized kernel is selected
-  // IOW, even in optimized kernel mode it support length 256
-
-  const u32 pw_max = PW_MAX;
-
-  return pw_max;
-}
-
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)
 {
   u32 *digest = (u32 *) digest_buf;
@@ -313,7 +303,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 {
   //  const u32 *digest = (const u32 *) digest_buf;
 
-  onepassword8_t *onepassword8 = (onepassword8_t *) esalt_buf;
+  const onepassword8_t *onepassword8 = (const onepassword8_t *) esalt_buf;
 
   // iv
 
@@ -333,7 +323,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   for (int i = 0; i < 1024; i++) ct_buf[i] = byte_swap_32 (onepassword8->ct_buf[i]);
 
-  u8 ct_buf8[(1024 * 2 * 4) + 1];
+  u8 *ct_buf8 = (u8 *) hcmalloc ((1024 * 2 * 4) + 1);
 
   const int ct_len = hex_encode ((const u8 *) ct_buf, onepassword8->ct_len, ct_buf8);
 
@@ -341,9 +331,9 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   // final
 
-  int out_len = snprintf ((char *) line_buf, line_size, "%s%s$%08x%08x%08x%08x%08x%08x%08x%08x$%08x%08x%08x%08x%08x%08x%08x%08x$%u$%s$%s$%08x%08x%08x%08x",
+  int out_len = snprintf (line_buf, line_size, "%s%s$%08x%08x%08x%08x%08x%08x%08x%08x$%08x%08x%08x%08x%08x%08x%08x%08x$%u$%s$%s$%08x%08x%08x%08x",
     SIGNATURE_1PASSWORD8,
-    (char *) onepassword8->email_buf,
+    (const char *) onepassword8->email_buf,
     onepassword8->hkdf_salt_buf[0],
     onepassword8->hkdf_salt_buf[1],
     onepassword8->hkdf_salt_buf[2],
@@ -361,12 +351,14 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     onepassword8->hkdf_key_buf[6],
     onepassword8->hkdf_key_buf[7],
     salt->salt_iter + 1,
-    (char *) iv_buf8,
-    (char *) ct_buf8,
+    (const char *) iv_buf8,
+    (const char *) ct_buf8,
     onepassword8->tag_buf[0],
     onepassword8->tag_buf[1],
     onepassword8->tag_buf[2],
     onepassword8->tag_buf[3]);
+
+  hcfree (ct_buf8);
 
   return out_len;
 }
@@ -382,6 +374,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = module_deep_comp_kernel;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -438,7 +432,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;
-  module_ctx->module_pw_max                   = module_pw_max;
+  module_ctx->module_pw_max                   = MODULE_DEFAULT;
   module_ctx->module_pw_min                   = MODULE_DEFAULT;
   module_ctx->module_salt_max                 = MODULE_DEFAULT;
   module_ctx->module_salt_min                 = MODULE_DEFAULT;

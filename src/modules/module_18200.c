@@ -9,6 +9,7 @@
 #include "bitops.h"
 #include "convert.h"
 #include "shared.h"
+#include "memory.h"
 
 static const u32   ATTACK_EXEC    = ATTACK_EXEC_INSIDE_KERNEL;
 static const u32   DGST_POS0      = 0;
@@ -54,37 +55,35 @@ typedef struct krb5asrep
 
 static const char *SIGNATURE_KRB5ASREP = "$krb5asrep$";
 
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+{
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
+  {
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: self-test failed
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
   char *jit_build_options = NULL;
 
-  u32 native_threads = 0;
+  // We must override whatever tuningdb entry or -T value was set by the user with this
+  // That's because of RC code in inc_cipher_rc4.cl has this for GPU (different on CPU):
+  // #define KEY32(t,k) (((k) * 32) + ((t) & 31) + (((t) / 32) * 2048))
+  // #define KEY8(t,k) (((k) & 3) + (((k) / 4) * 128) + (((t) & 31) * 4) + (((t) / 32) * 8192))
 
-  if (device_param->opencl_device_type & CL_DEVICE_TYPE_CPU)
-  {
-    native_threads = 1;
-  }
-  else if (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU)
-  {
-    #if defined (__APPLE__)
+  u32 native_threads = (device_param->opencl_device_type & CL_DEVICE_TYPE_CPU) ? 1 : 32;
 
-    native_threads = 32;
-
-    #else
-
-    if (device_param->device_local_mem_size < 49152)
-    {
-      native_threads = MIN (device_param->kernel_preferred_wgs_multiple, 32); // We can't just set 32, because Intel GPU need 8
-    }
-    else
-    {
-      native_threads = device_param->kernel_preferred_wgs_multiple;
-    }
-
-    #endif
-  }
-
-  hc_asprintf (&jit_build_options, "-D FIXED_LOCAL_SIZE=%u -D _unroll", native_threads);
+  hc_asprintf (&jit_build_options, "-D FIXED_LOCAL_SIZE=%u", native_threads);
 
   return jit_build_options;
 }
@@ -142,8 +141,8 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     krb5asrep->format = 2;
   }
 
-  char *account_info_start = (char *) line_buf + strlen (SIGNATURE_KRB5ASREP) + parse_off;
-  char *account_info_stop  = strchr ((const char *) account_info_start, ':');
+  const char *account_info_start = line_buf + strlen (SIGNATURE_KRB5ASREP) + parse_off;
+  char *account_info_stop  = strchr (account_info_start, ':');
 
   if (account_info_stop == NULL) return (PARSER_SEPARATOR_UNMATCHED);
 
@@ -277,13 +276,13 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 {
   const krb5asrep_t *krb5asrep = (const krb5asrep_t *) esalt_buf;
 
-  char data[5120 * 4 * 2] = { 0 };
+  char *data = (char *) hcmalloc (5120 * 4 * 2);
 
   for (u32 i = 0, j = 0; i < krb5asrep->edata2_len; i += 1, j += 2)
   {
-    u8 *ptr_edata2 = (u8 *) krb5asrep->edata2;
+    const u8 *ptr_edata2 = (const u8 *) krb5asrep->edata2;
 
-    sprintf (data + j, "%02x", ptr_edata2[i]);
+    snprintf (data + j, 3, "%02x", ptr_edata2[i]);
   }
 
   int line_len = 0;
@@ -292,7 +291,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   {
     line_len = snprintf (line_buf, line_size, "%s23$%s:%08x%08x%08x%08x$%s",
       SIGNATURE_KRB5ASREP,
-      (char *) krb5asrep->account_info,
+      (const char *) krb5asrep->account_info,
       byte_swap_32 (krb5asrep->checksum[0]),
       byte_swap_32 (krb5asrep->checksum[1]),
       byte_swap_32 (krb5asrep->checksum[2]),
@@ -303,13 +302,15 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   {
     line_len = snprintf (line_buf, line_size, "%s%s:%08x%08x%08x%08x$%s",
       SIGNATURE_KRB5ASREP,
-      (char *) krb5asrep->account_info,
+      (const char *) krb5asrep->account_info,
       byte_swap_32 (krb5asrep->checksum[0]),
       byte_swap_32 (krb5asrep->checksum[1]),
       byte_swap_32 (krb5asrep->checksum[2]),
       byte_swap_32 (krb5asrep->checksum[3]),
       data);
   }
+
+  hcfree (data);
 
   return line_len;
 }
@@ -325,6 +326,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -390,6 +393,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = MODULE_DEFAULT;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

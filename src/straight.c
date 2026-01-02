@@ -91,6 +91,13 @@ int straight_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
         return -1;
       }
 
+      if (rc == -2)
+      {
+        event_log_error (hashcat_ctx, "Error reading wordlist: %s", straight_ctx->dict);
+
+        return -1;
+      }
+
       if (status_ctx->words_cnt == 0)
       {
         logfile_sub_msg ("STOP");
@@ -125,6 +132,13 @@ int straight_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
 
         return -1;
       }
+
+      if (rc == -2)
+      {
+        event_log_error (hashcat_ctx, "Error reading wordlist: %s", combinator_ctx->dict1);
+
+        return -1;
+      }
     }
     else if (combinator_ctx->combs_mode == COMBINATOR_MODE_BASE_RIGHT)
     {
@@ -144,6 +158,13 @@ int straight_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
       if (rc == -1)
       {
         event_log_error (hashcat_ctx, "Integer overflow detected in keyspace of wordlist: %s", combinator_ctx->dict2);
+
+        return -1;
+      }
+
+      if (rc == -2)
+      {
+        event_log_error (hashcat_ctx, "Error reading wordlist: %s", combinator_ctx->dict2);
 
         return -1;
       }
@@ -194,12 +215,23 @@ int straight_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
       return -1;
     }
 
+    if (rc == -2)
+    {
+      event_log_error (hashcat_ctx, "Error reading wordlist: %s", straight_ctx->dict);
+
+      return -1;
+    }
+
     if (status_ctx->words_cnt == 0)
     {
       logfile_sub_msg ("STOP");
 
       return 0;
     }
+  }
+  else if (user_options->attack_mode == ATTACK_MODE_GENERIC)
+  {
+    // todo  ATTACK_MODE_GENERIC unknown
   }
   else if (user_options->attack_mode == ATTACK_MODE_ASSOCIATION)
   {
@@ -234,6 +266,13 @@ int straight_ctx_update_loop (hashcat_ctx_t *hashcat_ctx)
         return -1;
       }
 
+      if (rc == -2)
+      {
+        event_log_error (hashcat_ctx, "Error reading wordlist: %s", straight_ctx->dict);
+
+        return -1;
+      }
+
       if ((status_ctx->words_cnt / straight_ctx->kernel_rules_cnt) != hashes->salts_cnt)
       {
         event_log_error (hashcat_ctx, "Number of words in wordlist '%s' is not in sync with number of unique salts", straight_ctx->dict);
@@ -264,13 +303,14 @@ int straight_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
   if (user_options->usage         > 0)    return 0;
   if (user_options->backend_info  > 0)    return 0;
+  if (user_options->hash_info     > 0)    return 0;
 
   if (user_options->left         == true) return 0;
   if (user_options->show         == true) return 0;
   if (user_options->version      == true) return 0;
-  if (user_options->hash_info    == true) return 0;
 
-  if (user_options->attack_mode  == ATTACK_MODE_BF) return 0;
+  if (user_options->attack_mode  == ATTACK_MODE_BF)      return 0;
+  if (user_options->attack_mode  == ATTACK_MODE_GENERIC) return 0;
 
   straight_ctx->enabled = true;
 
@@ -490,6 +530,10 @@ int straight_ctx_init (hashcat_ctx_t *hashcat_ctx)
 
       return -1;
     }
+  }
+  else if (user_options->attack_mode == ATTACK_MODE_GENERIC)
+  {
+
   }
 
   return 0;

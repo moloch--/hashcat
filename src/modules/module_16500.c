@@ -327,7 +327,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     ptr_plain[86] = 0;
   }
 
-  const int line_len = snprintf (line_buf, line_size, "%s.%s", (char *) jwt->salt_buf, (char *) ptr_plain);
+  const int line_len = snprintf (line_buf, line_size, "%s.%s", (const char *) jwt->salt_buf, (const char *) ptr_plain);
 
   return line_len;
 }
@@ -343,6 +343,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = module_benchmark_salt;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

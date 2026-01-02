@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 
+# Script to extract the hash for use with hashcat modes 295xx and 34100
+
 #
 # Author......: See docs/credits.txt
 # License.....: MIT
 #
 
 from argparse import ArgumentParser
+from base64 import b64decode
 from collections import namedtuple
 from dataclasses import dataclass
 from os import SEEK_SET
 from struct import Struct
 from typing import List
+import json
 
 try:
     from enum import auto, IntEnum, StrEnum
@@ -228,7 +232,7 @@ def extract_version1(file):
     # read header
     header = file.read(header_struct.size)
     if len(header) < header_struct.size:
-        raise ValueError("file contains less data than needed")
+        raise ValueError("file contains less data than needed (invalid header len)")
 
     # convert bytes into temporary header
     header = header_struct.unpack(header)
@@ -243,7 +247,7 @@ def extract_version1(file):
         file.seek(key.material_offset * SECTOR_SIZE, SEEK_SET)
         af = file.read(header.key_bytes * key.stripes)
         if len(af) < (header.key_bytes * key.stripes):
-            raise ValueError("file contains less data than needed")
+            raise ValueError("file contains less data than needed (invalid af len)")
 
         key = KeyVersion1(key.active, key.iterations, key.salt, af)
         keys.append(key)
@@ -252,7 +256,7 @@ def extract_version1(file):
     file.seek(header.payload_offset * SECTOR_SIZE, SEEK_SET)
     payload = file.read(PAYLOAD_SIZE)
     if len(payload) < PAYLOAD_SIZE:
-        raise ValueError("file contains less data than needed")
+        raise ValueError("file contains less data than needed (invalid payload len)")
     if sum(payload) == 0:
         raise ValueError("file not initialized - payload contains zeros only")
 
@@ -301,6 +305,72 @@ def extract_version1(file):
         print(hash)
 
 
+@dataclass(init=False)
+class HeaderVersion2:
+    VERSION = 0x0002
+
+
+def extract_version2(file):
+    file.seek(0x1000)
+    json_data = file.read(32768)
+    json_end = json_data.find(b"\x00")
+    json_header = json.loads(json_data[:json_end])
+
+    # print("\nWe got the following large json header:\n")
+    #print(json.dumps(json_header, indent=4))
+
+    keyslots_cnt = len(json_header['keyslots'])
+    if keyslots_cnt == 0:
+        raise ValueError("no keyslots founds")
+
+    # extract first sector of the segment for entropy check
+    segment_offset = int(json_header['segments']['0']['offset'])
+    file.seek(segment_offset)
+    first_sector = file.read(512)
+    if len(first_sector) < 512:
+        raise ValueError("file contains less data than needed (invalid payload len)")
+
+    for key in json_header['keyslots']:
+        if json_header['keyslots'][key]['type'] == 'reencrypt':
+            continue
+        keyslot_offset = int(json_header['keyslots'][key]['area']['offset'])
+        encryption = json_header['keyslots'][key]['area']['encryption']
+        stripes = int(json_header['keyslots'][key]['af']['stripes'])
+        key_size = int(json_header['keyslots'][key]['key_size'])
+
+        (cipher_type, cipher_mode) = tuple(encryption.split("-", 1))
+
+        file.seek(keyslot_offset)
+        keyslot_encrypted_data = file.read(key_size * stripes)
+
+        hash_mode = json_header['keyslots'][key]['af']['hash']
+
+        kdf = json_header['keyslots'][key]['kdf']['type']
+        time = int(json_header['keyslots'][key]['kdf']['time'])
+        memory = int(json_header['keyslots'][key]['kdf']['memory'])
+        cpus = int(json_header['keyslots'][key]['kdf']['cpus'])
+        salt = b64decode(json_header['keyslots'][key]['kdf']['salt'])
+
+        hash = SIGNATURE + "$".join(
+            map(
+                str,
+                [
+                    HeaderVersion2.VERSION,
+                    kdf,
+                    hash_mode,
+                    cipher_type,
+                    cipher_mode,
+                    key_size * 8,
+                    f"m={memory},t={time},p={cpus}",
+                    salt.hex(),
+                    keyslot_encrypted_data.hex(),
+                    first_sector.hex(),
+                ],
+            )
+        )
+        print(hash)
+
+
 # main
 
 
@@ -338,6 +408,7 @@ if __name__ == "__main__":
             try:
                 mapping = {
                     HeaderVersion1.VERSION: extract_version1,
+                    HeaderVersion2.VERSION: extract_version2,
                 }
                 extract = mapping[header.version]
                 extract(file)

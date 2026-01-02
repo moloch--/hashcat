@@ -242,7 +242,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const int enc_data_size = hc_strtoul ((const char *) token.buf[2], NULL, 10);
 
-  const int encrypted_data_size = hex_decode ((const u8 *) token.buf[4], token.len[4], (u8 *) gpg->encrypted_data);
+  const int encrypted_data_size = hex_decode (token.buf[4], token.len[4], (u8 *) gpg->encrypted_data);
 
   if (enc_data_size != encrypted_data_size) return (PARSER_CT_LENGTH);
 
@@ -266,7 +266,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   if (hc_strtoul ((const char *) token.buf[9], NULL, 10) != sizeof (gpg->iv)) return (PARSER_IV_LENGTH);
 
-  const int iv_size = hex_decode ((const u8 *) token.buf[10], token.len[10], (u8 *) gpg->iv);
+  const int iv_size = hex_decode (token.buf[10], token.len[10], (u8 *) gpg->iv);
 
   if (iv_size != sizeof (gpg->iv)) return (PARSER_IV_LENGTH);
 
@@ -282,7 +282,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   salt->salt_repeats = gpg->cipher_algo == 7 ? 0 : 1; // "minus one"
 
-  salt->salt_len = hex_decode ((const u8 *) token.buf[12], token.len[12], (u8 *) salt->salt_buf);
+  salt->salt_len = hex_decode (token.buf[12], token.len[12], (u8 *) salt->salt_buf);
 
   if (salt->salt_len != 8) return (PARSER_SALT_LENGTH);
 
@@ -300,6 +300,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   const gpg_t *gpg = (const gpg_t *) esalt_buf;
 
   u8 encrypted_data[(384 * 8) + 1];
+  memset(encrypted_data, 0, 384*8+1); // always initialize to zero
 
   hex_encode ((const u8 *) gpg->encrypted_data, gpg->encrypted_data_size, (u8 *) encrypted_data);
 
@@ -336,6 +337,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = module_deep_comp_kernel;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

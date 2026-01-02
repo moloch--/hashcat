@@ -151,7 +151,7 @@ static bool matches_separator (const u8 *buf, const size_t len, const char separ
 
 bool is_hexify (const u8 *buf, const size_t len)
 {
-  if (len < 6) return false; // $HEX[] = 6
+  //  if (len < 6) return false; // $HEX[] = 6
 
   // length of the hex string must be a multiple of 2
   // and the length of "$HEX[]" is 6 (also an even length)
@@ -159,12 +159,12 @@ bool is_hexify (const u8 *buf, const size_t len)
 
   if ((len & 1) == 1) return false;
 
-  if (buf[0]       != '$') return (false);
-  if (buf[1]       != 'H') return (false);
-  if (buf[2]       != 'E') return (false);
-  if (buf[3]       != 'X') return (false);
-  if (buf[4]       != '[') return (false);
-  if (buf[len - 1] != ']') return (false);
+  u32 *ptr = (u32 *) buf;
+
+  if (*ptr != 0x58454824) return false; // $HEX
+
+  if (buf[4]       != '[') return false;
+  if (buf[len - 1] != ']') return false;
 
   if (is_valid_hex_string (buf + 5, len - 6) == false) return false;
 
@@ -189,42 +189,41 @@ size_t exec_unhexify (const u8 *in_buf, const size_t in_len, u8 *out_buf, const 
 
 bool need_hexify (const u8 *buf, const size_t len, const char separator, bool always_ascii)
 {
-  bool rc = false;
-
   if (always_ascii == true)
   {
     if (printable_ascii (buf, len) == false)
     {
-      rc = true;
+      return true;
     }
   }
   else
   {
     if (printable_utf8 (buf, len) == false)
     {
-      rc = true;
+      return true;
     }
   }
 
-  if (rc == false)
+  if (matches_separator (buf, len, separator) == true)
   {
-    if (matches_separator (buf, len, separator) == true)
-    {
-      rc = true;
-    }
+    return true;
   }
 
   // also test if the password is of the format $HEX[]:
 
-  if (rc == false)
+  if (is_hexify (buf, len))
   {
-    if (is_hexify (buf, len))
-    {
-      rc = true;
-    }
+    return true;
   }
 
-  return rc;
+  // check if the password ends in whitespace
+
+  if (len > 0 && isspace (buf[len - 1]))
+  {
+    return true;
+  }
+
+  return false;
 }
 
 void exec_hexify (const u8 *buf, const size_t len, u8 *out)

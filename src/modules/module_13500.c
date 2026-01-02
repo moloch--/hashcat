@@ -184,7 +184,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   {
     const u8 *ptr = (const u8 *) pstoken->salt_buf;
 
-    sprintf (pstoken_tmp + j, "%02x", ptr[i]);
+    snprintf (pstoken_tmp + j, 3, "%02x", ptr[i]);
   }
 
   const int line_len = snprintf (line_buf, line_size, "%08x%08x%08x%08x%08x%c%s",
@@ -210,6 +210,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

@@ -86,8 +86,8 @@ double      status_get_cpt_avg_hour                   (const hashcat_ctx_t *hash
 double      status_get_cpt_avg_day                    (const hashcat_ctx_t *hashcat_ctx);
 char       *status_get_cpt                            (const hashcat_ctx_t *hashcat_ctx);
 int         status_get_salt_pos_dev                   (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);
-int         status_get_innerloop_pos_dev              (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);
-int         status_get_innerloop_left_dev             (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);
+u64         status_get_innerloop_pos_dev              (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);
+u64         status_get_innerloop_left_dev             (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);
 int         status_get_iteration_pos_dev              (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);
 int         status_get_iteration_left_dev             (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);
 char       *status_get_device_name                    (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx);

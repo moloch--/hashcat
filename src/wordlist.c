@@ -14,6 +14,7 @@
 #include "shared.h"
 #include "wordlist.h"
 #include "bitops.h"
+#include "timer.h"
 #include "emu_inc_hash_sha1.h"
 
 size_t convert_from_hex (hashcat_ctx_t *hashcat_ctx, char *line_buf, const size_t line_len)
@@ -37,7 +38,7 @@ size_t convert_from_hex (hashcat_ctx_t *hashcat_ctx, char *line_buf, const size_
     return (i);
   }
 
-  if (user_options->wordlist_autohex_disable == false)
+  if (user_options->wordlist_autohex == true)
   {
     if (is_hexify ((const u8 *) line_buf, line_len) == true)
     {
@@ -59,6 +60,11 @@ int load_segment (hashcat_ctx_t *hashcat_ctx, HCFILE *fp)
   wl_data->pos = 0;
 
   wl_data->cnt = hc_fread (wl_data->buf, 1, wl_data->incr - 1000, fp);
+
+  if (wl_data->cnt == (size_t) -1)
+  {
+    return -1;
+  }
 
   wl_data->buf[wl_data->cnt] = 0;
 
@@ -339,7 +345,12 @@ void get_next_word (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, char **out_buf, u32 
     return;
   }
 
-  load_segment (hashcat_ctx, fp);
+  if (load_segment (hashcat_ctx, fp) == -1)
+  {
+    event_log_error (hashcat_ctx, "Error reading file!\n");
+
+    return;
+  }
 
   get_next_word (hashcat_ctx, fp, out_buf, out_len);
 }
@@ -384,6 +395,37 @@ void pw_base_add (hc_device_param_t *device_param, pw_pre_t *pw_pre)
   else
   {
     fprintf (stderr, "BUG pw_base_add()!!\n");
+
+    return;
+  }
+}
+
+void pw_add_zerocopy (hc_device_param_t *device_param, u8 *out_buf, const int pw_len)
+{
+  if (device_param->pws_cnt < device_param->kernel_power)
+  {
+    pw_idx_t *pw_idx = device_param->pws_idx + device_param->pws_cnt;
+
+    const u32 pw_len4 = (pw_len + 3) & ~3; // round up to multiple of 4
+
+    const u32 pw_len4_cnt = pw_len4 / 4;
+
+    pw_idx->cnt = pw_len4_cnt;
+    pw_idx->len = pw_len;
+
+    memset (out_buf + pw_len, 0, pw_len4 - pw_len);
+
+    // prepare next element
+
+    pw_idx_t *pw_idx_next = pw_idx + 1;
+
+    pw_idx_next->off = pw_idx->off + pw_idx->cnt;
+
+    device_param->pws_cnt++;
+  }
+  else
+  {
+    fprintf (stderr, "BUG pw_add_zerocopy()!!\n");
 
     return;
   }
@@ -512,7 +554,7 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
 
       if (user_options_extra->attack_kern == ATTACK_KERN_STRAIGHT)
       {
-        if (overflow_check_u64_mul (keyspace, straight_ctx->kernel_rules_cnt) == false) return -1;
+        if (overflow_check_u64_mul (keyspace, straight_ctx->kernel_rules_cnt) == true) return -1;
 
         keyspace *= straight_ctx->kernel_rules_cnt;
       }
@@ -520,13 +562,13 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
       {
         if (((hashconfig->opti_type & OPTI_TYPE_OPTIMIZED_KERNEL) == 0) && (user_options->attack_mode == ATTACK_MODE_HYBRID2))
         {
-          if (overflow_check_u64_mul (keyspace, mask_ctx->bfs_cnt) == false) return -1;
+          if (overflow_check_u64_mul (keyspace, mask_ctx->bfs_cnt) == true) return -1;
 
           keyspace *= mask_ctx->bfs_cnt;
         }
         else
         {
-          if (overflow_check_u64_mul (keyspace, combinator_ctx->combs_cnt) == false) return -1;
+          if (overflow_check_u64_mul (keyspace, combinator_ctx->combs_cnt) == true) return -1;
 
           keyspace *= combinator_ctx->combs_cnt;
         }
@@ -547,12 +589,11 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
     }
   }
 
-  time_t rt_start;
+  hc_timer_t start;
 
-  time (&rt_start);
+  hc_timer_set (&start);
 
-  time_t now  = 0;
-  time_t prev = 0;
+  double prev_percent = 0;
 
   u64 comp = 0;
   u64 cnt  = 0;
@@ -560,7 +601,10 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
 
   while (!hc_feof (fp))
   {
-    load_segment (hashcat_ctx, fp);
+    if (load_segment (hashcat_ctx, fp) == -1)
+    {
+      return -2;
+    }
 
     comp += wl_data->cnt;
 
@@ -620,7 +664,7 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
 
       if (user_options_extra->attack_kern == ATTACK_KERN_STRAIGHT)
       {
-        if (overflow_check_u64_add (cnt, straight_ctx->kernel_rules_cnt) == false) return -1;
+        if (overflow_check_u64_add (cnt, straight_ctx->kernel_rules_cnt) == true) return -1;
 
         cnt += straight_ctx->kernel_rules_cnt;
       }
@@ -628,26 +672,24 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
       {
         if (((hashconfig->opti_type & OPTI_TYPE_OPTIMIZED_KERNEL) == 0) && (user_options->attack_mode == ATTACK_MODE_HYBRID2))
         {
-          if (overflow_check_u64_add (cnt, mask_ctx->bfs_cnt) == false) return -1;
+          if (overflow_check_u64_add (cnt, mask_ctx->bfs_cnt) == true) return -1;
 
           cnt += mask_ctx->bfs_cnt;
         }
         else
         {
-          if (overflow_check_u64_add (cnt, combinator_ctx->combs_cnt) == false) return -1;
+          if (overflow_check_u64_add (cnt, combinator_ctx->combs_cnt) == true) return -1;
 
           cnt += combinator_ctx->combs_cnt;
         }
       }
     }
 
-    time (&now);
-
-    if ((now - prev) == 0) continue;
-
-    time (&prev);
-
     double percent = ((double) comp / (double) d.stat.st_size) * 100;
+
+    if ((prev_percent + 1.234) > percent) continue;
+
+    prev_percent = percent;
 
     if (percent < 100)
     {
@@ -658,14 +700,11 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
       cache_generate.percent     = percent;
       cache_generate.cnt         = cnt;
       cache_generate.cnt2        = cnt2;
+      cache_generate.runtime     = hc_timer_get (start);
 
       EVENT_DATA (EVENT_WORDLIST_CACHE_GENERATE, &cache_generate, sizeof (cache_generate));
     }
   }
-
-  time_t rt_stop;
-
-  time (&rt_stop);
 
   cache_generate_t cache_generate;
 
@@ -674,7 +713,7 @@ int count_words (hashcat_ctx_t *hashcat_ctx, HCFILE *fp, const char *dictfile, u
   cache_generate.percent     = 100;
   cache_generate.cnt         = cnt;
   cache_generate.cnt2        = cnt2;
-  cache_generate.runtime     = rt_stop - rt_start;
+  cache_generate.runtime     = hc_timer_get (start);
 
   EVENT_DATA (EVENT_WORDLIST_CACHE_GENERATE, &cache_generate, sizeof (cache_generate));
 
@@ -697,9 +736,9 @@ int wl_data_init (hashcat_ctx_t *hashcat_ctx)
 
   if (user_options->usage         > 0)    return 0;
   if (user_options->backend_info  > 0)    return 0;
+  if (user_options->hash_info     > 0)    return 0;
 
   if (user_options->benchmark    == true) return 0;
-  if (user_options->hash_info    == true) return 0;
   if (user_options->left         == true) return 0;
   if (user_options->version      == true) return 0;
 
@@ -730,7 +769,7 @@ int wl_data_init (hashcat_ctx_t *hashcat_ctx)
     }
     else
     {
-      if (user_options->wordlist_autohex_disable == false)
+      if (user_options->wordlist_autohex == true)
       {
         wl_data->func = get_next_word_lm_hex_or_text; // might be $HEX[] notation
       }

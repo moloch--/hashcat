@@ -77,13 +77,6 @@ u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED c
   return tmp_size;
 }
 
-u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  const u32 pw_max = PW_MAX;
-
-  return pw_max;
-}
-
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)
 {
   u32 *digest = (u32 *) digest_buf;
@@ -112,18 +105,18 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   // iterations in decimal representation
   token.sep[2]     = '$';
   token.len_min[2] = 1;
-  token.len_max[2] = 6;
+  token.len_max[2] = 8;
   token.attr[2]    = TOKEN_ATTR_VERIFY_LENGTH
                    | TOKEN_ATTR_VERIFY_DIGIT;
 
-  // salt in alternate base64 repretentation
+  // salt in alternate base64 representation
   token.sep[3]     = '$';
   token.len_min[3] = SALT_MIN;
   token.len_max[3] = SALT_MAX;
   token.attr[3]    = TOKEN_ATTR_VERIFY_LENGTH
                    | TOKEN_ATTR_VERIFY_BASE64B;
 
-  // payload in alternate base64 representanion
+  // payload in alternate base64 representation
   token.sep[4]     = '$';
   token.len[4]     = HASH_LEN_B64;
   token.attr[4]    = TOKEN_ATTR_FIXED_LENGTH
@@ -137,14 +130,13 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   const u8 *iter_pos = token.buf[2];
   salt->salt_iter = hc_strtoul ((const char *) iter_pos, NULL, 10) - 1;
 
-
   // base64 decode salt
   const u8 *salt_pos = token.buf[3];
   const int salt_len = token.len[3];
 
   u8 tmp_buf[256] = { 0 };
 
-  const size_t salt_len_decoded = base64_decode (ab64_to_int, (const u8 *) salt_pos, salt_len, tmp_buf);
+  const size_t salt_len_decoded = base64_decode (ab64_to_int, salt_pos, salt_len, tmp_buf);
 
   u8 *salt_buf_ptr = (u8 *) pbkdf2_sha256->salt_buf;
   memcpy (salt_buf_ptr, tmp_buf, salt_len_decoded);
@@ -152,12 +144,11 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   salt->salt_len = salt_len_decoded;
 
-
   // base64 decode hash
   const u8 *hash_pos = token.buf[4];
   const int hash_len = token.len[4];
 
-  base64_decode (ab64_to_int, (const u8 *) hash_pos, hash_len, tmp_buf);
+  base64_decode (ab64_to_int, hash_pos, hash_len, tmp_buf);
   memcpy (digest, tmp_buf, HASH_LEN_RAW);
 
   digest[0] = byte_swap_32 (digest[0]);
@@ -230,6 +221,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -286,7 +279,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;
-  module_ctx->module_pw_max                   = module_pw_max;
+  module_ctx->module_pw_max                   = MODULE_DEFAULT;
   module_ctx->module_pw_min                   = MODULE_DEFAULT;
   module_ctx->module_salt_max                 = MODULE_DEFAULT;
   module_ctx->module_salt_min                 = MODULE_DEFAULT;

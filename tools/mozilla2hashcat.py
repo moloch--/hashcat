@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Script to extract the "hash" from a password protected key3.db or key4.db file.
 #

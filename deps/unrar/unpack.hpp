@@ -279,7 +279,6 @@ class Unpack:PackDef
     bool Suspended;
     bool UnpAllBuf;
     bool UnpSomeRead;
-    int64 WrittenFileSize;
     bool FileExtracted;
 
 
@@ -389,6 +388,7 @@ class Unpack:PackDef
     void UnpackDecode(UnpackThreadData &D);
 #endif
 
+    int64 WrittenFileSize;
     byte *hcwin;
     byte *hcppm;
 

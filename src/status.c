@@ -35,6 +35,8 @@ static const char *const  ST_0013 = "Error";
 static const char *const  ST_0014 = "Aborted (Finish)";
 static const char *const  ST_0015 = "Running (Quit after attack requested)";
 static const char *const  ST_0016 = "Autodetect";
+static const char *const  ST_0017 = "Paused (Checkpoint Quit requested)";
+static const char *const  ST_0018 = "Paused (Quit after attack requested)";
 static const char *const  ST_9999 = "Unknown! Bug!";
 
 static const char UNITS[7] = { ' ', 'k', 'M', 'G', 'T', 'P', 'E' };
@@ -262,8 +264,6 @@ const char *status_get_status_string (const hashcat_ctx_t *hashcat_ctx)
 
   const int devices_status = status_ctx->devices_status;
 
-  // special case: running but checkpoint quit requested
-
   if (devices_status == STATUS_RUNNING)
   {
     if (status_ctx->checkpoint_shutdown == true)
@@ -274,6 +274,18 @@ const char *status_get_status_string (const hashcat_ctx_t *hashcat_ctx)
     if (status_ctx->finish_shutdown == true)
     {
       return ST_0015;
+    }
+  }
+  else if (devices_status == STATUS_PAUSED)
+  {
+    if (status_ctx->checkpoint_shutdown == true)
+    {
+      return ST_0017;
+    }
+
+    if (status_ctx->finish_shutdown == true)
+    {
+      return ST_0018;
     }
   }
 
@@ -355,7 +367,7 @@ char *status_get_hash_target (const hashcat_ctx_t *hashcat_ctx)
 
     char *tmp_buf = (char *) hcmalloc (HCBUFSIZ_LARGE);
 
-    const int tmp_len = hash_encode (hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, tmp_buf, HCBUFSIZ_LARGE, 0, 0);
+    const int tmp_len = hash_encode (hashcat_ctx->user_options, hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, tmp_buf, HCBUFSIZ_LARGE, 0, 0);
 
     tmp_buf[tmp_len] = 0;
 
@@ -394,6 +406,10 @@ int status_get_guess_mode (const hashcat_ctx_t *hashcat_ctx)
   if (user_options->custom_charset_2) has_mask_cs = true;
   if (user_options->custom_charset_3) has_mask_cs = true;
   if (user_options->custom_charset_4) has_mask_cs = true;
+  if (user_options->custom_charset_5) has_mask_cs = true;
+  if (user_options->custom_charset_6) has_mask_cs = true;
+  if (user_options->custom_charset_7) has_mask_cs = true;
+  if (user_options->custom_charset_8) has_mask_cs = true;
 
   if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
   {
@@ -456,6 +472,19 @@ int status_get_guess_mode (const hashcat_ctx_t *hashcat_ctx)
     return GUESS_MODE_HYBRID2;
   }
 
+  if (user_options->attack_mode == ATTACK_MODE_GENERIC)
+  {
+    if (has_rule_file == true)
+    {
+      return GUESS_MODE_GENERIC_RULES_FILE;
+    }
+    if (has_rule_gen == true)
+    {
+      return GUESS_MODE_GENERIC_RULES_GEN;
+    }
+    return GUESS_MODE_GENERIC;
+  }
+
   return GUESS_MODE_NONE;
 }
 
@@ -513,6 +542,12 @@ char *status_get_guess_base (const hashcat_ctx_t *hashcat_ctx)
 
     return strdup (straight_ctx->dict);
   }
+
+  if (user_options->attack_mode == ATTACK_MODE_GENERIC)
+  {
+    // todo ATTACK_MODE_GENERIC probably python source file or so? here we will not have a wordlist!
+  }
+
   return NULL;
 }
 
@@ -559,6 +594,11 @@ int status_get_guess_base_offset (const hashcat_ctx_t *hashcat_ctx)
     const straight_ctx_t *straight_ctx = hashcat_ctx->straight_ctx;
 
     return straight_ctx->dicts_pos + 1;
+  }
+
+  if (user_options->attack_mode == ATTACK_MODE_GENERIC)
+  {
+    return 1;
   }
 
   return 0;
@@ -609,6 +649,11 @@ int status_get_guess_base_count (const hashcat_ctx_t *hashcat_ctx)
     return straight_ctx->dicts_cnt;
   }
 
+  if (user_options->attack_mode == ATTACK_MODE_GENERIC)
+  {
+    return 1;
+  }
+
   return 0;
 }
 
@@ -627,7 +672,7 @@ char *status_get_guess_mod (const hashcat_ctx_t *hashcat_ctx)
   const hashconfig_t   *hashconfig   = hashcat_ctx->hashconfig;
   const user_options_t *user_options = hashcat_ctx->user_options;
 
-  if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
+  if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_GENERIC) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
   {
     return status_get_rules_file (hashcat_ctx);
   }
@@ -677,7 +722,7 @@ int status_get_guess_mod_offset (const hashcat_ctx_t *hashcat_ctx)
   const hashconfig_t   *hashconfig   = hashcat_ctx->hashconfig;
   const user_options_t *user_options = hashcat_ctx->user_options;
 
-  if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
+  if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_GENERIC) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
   {
     return 1;
   }
@@ -721,7 +766,7 @@ int status_get_guess_mod_count (const hashcat_ctx_t *hashcat_ctx)
   const hashconfig_t   *hashconfig   = hashcat_ctx->hashconfig;
   const user_options_t *user_options = hashcat_ctx->user_options;
 
-  if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
+  if ((user_options->attack_mode == ATTACK_MODE_STRAIGHT) || (user_options->attack_mode == ATTACK_MODE_GENERIC) || (user_options->attack_mode == ATTACK_MODE_ASSOCIATION))
   {
     return 1;
   }
@@ -778,17 +823,25 @@ char *status_get_guess_charset (const hashcat_ctx_t *hashcat_ctx)
   const char *custom_charset_2 = user_options->custom_charset_2;
   const char *custom_charset_3 = user_options->custom_charset_3;
   const char *custom_charset_4 = user_options->custom_charset_4;
+  const char *custom_charset_5 = user_options->custom_charset_5;
+  const char *custom_charset_6 = user_options->custom_charset_6;
+  const char *custom_charset_7 = user_options->custom_charset_7;
+  const char *custom_charset_8 = user_options->custom_charset_8;
 
-  if ((custom_charset_1 != NULL) || (custom_charset_2 != NULL) || (custom_charset_3 != NULL) || (custom_charset_4 != NULL))
+  if ((custom_charset_1 != NULL) || (custom_charset_2 != NULL) || (custom_charset_3 != NULL) || (custom_charset_4 != NULL) || (custom_charset_5 != NULL) || (custom_charset_6 != NULL) || (custom_charset_7 != NULL) || (custom_charset_8 != NULL))
   {
     char *tmp_buf;
 
-    if (custom_charset_1 == NULL) custom_charset_1 = "Undefined";
-    if (custom_charset_2 == NULL) custom_charset_2 = "Undefined";
-    if (custom_charset_3 == NULL) custom_charset_3 = "Undefined";
-    if (custom_charset_4 == NULL) custom_charset_4 = "Undefined";
+    if (custom_charset_1 == NULL) custom_charset_1 = "N/A";
+    if (custom_charset_2 == NULL) custom_charset_2 = "N/A";
+    if (custom_charset_3 == NULL) custom_charset_3 = "N/A";
+    if (custom_charset_4 == NULL) custom_charset_4 = "N/A";
+    if (custom_charset_5 == NULL) custom_charset_5 = "N/A";
+    if (custom_charset_6 == NULL) custom_charset_6 = "N/A";
+    if (custom_charset_7 == NULL) custom_charset_7 = "N/A";
+    if (custom_charset_8 == NULL) custom_charset_8 = "N/A";
 
-    hc_asprintf (&tmp_buf, "-1 %s, -2 %s, -3 %s, -4 %s", custom_charset_1, custom_charset_2, custom_charset_3, custom_charset_4);
+    hc_asprintf (&tmp_buf, "-1 %s, -2 %s, -3 %s, -4 %s, -5 %s, -6 %s, -7 %s, -8 %s", custom_charset_1, custom_charset_2, custom_charset_3, custom_charset_4, custom_charset_5, custom_charset_6, custom_charset_7, custom_charset_8);
 
     return tmp_buf;
   }
@@ -842,8 +895,8 @@ char *status_get_guess_candidates_dev (const hashcat_ctx_t *hashcat_ctx, const i
   const u64 outerloop_first = 0;
   const u64 outerloop_last  = device_param->outerloop_left - 1;
 
-  const u32 innerloop_first = 0;
-  const u32 innerloop_last  = device_param->innerloop_left - 1;
+  const u64 innerloop_first = 0;
+  const u64 innerloop_last  = device_param->innerloop_left - 1;
 
   plain_t plain1 = { outerloop_first, innerloop_first, 0, 0, 0, 0, 0 };
   plain_t plain2 = { outerloop_last,  innerloop_last,  0, 0, 0, 0, 0 };
@@ -1069,7 +1122,7 @@ time_t status_get_sec_etc (const hashcat_ctx_t *hashcat_ctx)
 
   time_t sec_etc = 0;
 
-  if ((user_options_extra->wordlist_mode == WL_MODE_FILE) || (user_options_extra->wordlist_mode == WL_MODE_MASK))
+  if ((user_options_extra->wordlist_mode == WL_MODE_FILE) || (user_options_extra->wordlist_mode == WL_MODE_MASK) || (user_options_extra->wordlist_mode == WL_MODE_GENERIC))
   {
     if (status_ctx->devices_status != STATUS_CRACKED)
     {
@@ -1080,7 +1133,7 @@ time_t status_get_sec_etc (const hashcat_ctx_t *hashcat_ctx)
 
       const double hashes_msec_all = status_get_hashes_msec_all (hashcat_ctx);
 
-      if (hashes_msec_all > 0)
+      if ((progress_end_relative_skip) > 0 && (hashes_msec_all > 0))
       {
         const u64 progress_left_relative_skip = progress_end_relative_skip - progress_cur_relative_skip;
 
@@ -1105,7 +1158,7 @@ char *status_get_time_estimated_absolute (const hashcat_ctx_t *hashcat_ctx)
 
   char *etc;
 
-  if (overflow_check_u64_add (now, sec_etc) == false)
+  if (overflow_check_u64_add (now, sec_etc) == true)
   {
     etc = (char *) ETA_ABSOLUTE_MAX_EXCEEDED;
   }
@@ -1329,6 +1382,8 @@ u64 status_get_progress_ignore (const hashcat_ctx_t *hashcat_ctx)
 
   u64 words_cnt = status_ctx->words_cnt;
 
+  if (words_cnt == -1ULL) words_cnt = 0;
+
   if (user_options->limit)
   {
     const combinator_ctx_t *combinator_ctx = hashcat_ctx->combinator_ctx;
@@ -1377,6 +1432,8 @@ u64 status_get_progress_end (const hashcat_ctx_t *hashcat_ctx)
   const user_options_extra_t *user_options_extra = hashcat_ctx->user_options_extra;
 
   u64 progress_end = status_ctx->words_cnt;
+
+  if (progress_end == -1ULL) progress_end = 0;
 
   if (user_options->attack_mode == ATTACK_MODE_ASSOCIATION)
   {
@@ -1811,33 +1868,33 @@ int status_get_salt_pos_dev (const hashcat_ctx_t *hashcat_ctx, const int backend
   return salt_pos;
 }
 
-int status_get_innerloop_pos_dev (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx)
+u64 status_get_innerloop_pos_dev (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx)
 {
   const backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
   hc_device_param_t *device_param = &backend_ctx->devices_param[backend_devices_idx];
 
-  int innerloop_pos = 0;
+  u64 innerloop_pos = 0;
 
   if ((device_param->skipped == false) && (device_param->skipped_warning == false))
   {
-    innerloop_pos = (int) device_param->innerloop_pos;
+    innerloop_pos = device_param->innerloop_pos;
   }
 
   return innerloop_pos;
 }
 
-int status_get_innerloop_left_dev (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx)
+u64 status_get_innerloop_left_dev (const hashcat_ctx_t *hashcat_ctx, const int backend_devices_idx)
 {
   const backend_ctx_t *backend_ctx = hashcat_ctx->backend_ctx;
 
   hc_device_param_t *device_param = &backend_ctx->devices_param[backend_devices_idx];
 
-  int innerloop_left = 0;
+  u64 innerloop_left = 0;
 
   if ((device_param->skipped == false) && (device_param->skipped_warning == false))
   {
-    innerloop_left = (int) device_param->innerloop_left;
+    innerloop_left = device_param->innerloop_left;
   }
 
   return innerloop_left;
@@ -2068,7 +2125,7 @@ char *status_get_brain_link_send_bytes_sec_dev (const hashcat_ctx_t *hashcat_ctx
 }
 #endif
 
-#if defined(__APPLE__)
+#if defined (__APPLE__)
 char *status_get_hwmon_fan_dev (const hashcat_ctx_t *hashcat_ctx)
 {
   status_ctx_t *status_ctx = hashcat_ctx->status_ctx;
@@ -2108,6 +2165,7 @@ char *status_get_hwmon_dev (const hashcat_ctx_t *hashcat_ctx, const int backend_
   const int num_corespeed   = hm_get_corespeed_with_devices_idx   ((hashcat_ctx_t *) hashcat_ctx, backend_devices_idx);
   const int num_memoryspeed = hm_get_memoryspeed_with_devices_idx ((hashcat_ctx_t *) hashcat_ctx, backend_devices_idx);
   const int num_buslanes    = hm_get_buslanes_with_devices_idx    ((hashcat_ctx_t *) hashcat_ctx, backend_devices_idx);
+  const int64_t num_power   = hm_get_power_with_devices_idx       ((hashcat_ctx_t *) hashcat_ctx, backend_devices_idx);
 
   int output_len = 0;
 
@@ -2139,6 +2197,11 @@ char *status_get_hwmon_dev (const hashcat_ctx_t *hashcat_ctx, const int backend_
   if (num_buslanes >= 0)
   {
     output_len += snprintf (output_buf + output_len, HCBUFSIZ_TINY - output_len, "Bus:%u ", num_buslanes);
+  }
+
+  if (num_power >= 0)
+  {
+    output_len += snprintf (output_buf + output_len, HCBUFSIZ_TINY - output_len, "Pwr:%" PRId64 "mW ", num_power);
   }
 
   if (output_len > 0)

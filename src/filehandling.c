@@ -76,6 +76,8 @@ bool hc_fopen (HCFILE *fp, const char *path, const char *mode)
   fp->path     = NULL;
   fp->mode     = NULL;
 
+  fp->uncompressed_size = 0;
+
   int oflag = -1;
 
   int fmode = S_IRUSR|S_IWUSR;
@@ -84,7 +86,7 @@ bool hc_fopen (HCFILE *fp, const char *path, const char *mode)
   {
     oflag = O_WRONLY | O_CREAT | O_APPEND;
 
-    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    #if defined (MSDOS) || defined (OS2) || defined (WIN32) || defined (_WIN32) || defined (__CYGWIN__)
     if (strncmp (mode, "ab", 2) == 0) oflag |= O_BINARY;
     #endif
   }
@@ -93,7 +95,7 @@ bool hc_fopen (HCFILE *fp, const char *path, const char *mode)
     oflag = O_RDONLY;
     fmode = -1;
 
-    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    #if defined (MSDOS) || defined (OS2) || defined (WIN32) || defined (_WIN32) || defined (__CYGWIN__)
     if (strncmp (mode, "rb", 2) == 0) oflag |= O_BINARY;
     #endif
   }
@@ -101,7 +103,7 @@ bool hc_fopen (HCFILE *fp, const char *path, const char *mode)
   {
     oflag = O_WRONLY | O_CREAT | O_TRUNC;
 
-    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    #if defined (MSDOS) || defined (OS2) || defined (WIN32) || defined (_WIN32) || defined (__CYGWIN__)
     if (strncmp (mode, "wb", 2) == 0) oflag |= O_BINARY;
     #endif
   }
@@ -214,7 +216,7 @@ bool hc_fopen (HCFILE *fp, const char *path, const char *mode)
     lookStream.buf = xfp->inBuf;
     lookStream.bufSize = HCFILE_BUFFER_SIZE;
     lookStream.realStream = &inStream->vt;
-    LookToRead2_Init (&lookStream);
+    LookToRead2_INIT (&lookStream);
     Xzs_Construct (&xfp->streams);
     Int64 offset = 0;
     SRes res = Xzs_ReadBackward (&xfp->streams, &lookStream.vt, &offset, NULL, alloc);
@@ -313,7 +315,7 @@ bool hc_fopen_raw (HCFILE *fp, const char *path, const char *mode)
   {
     oflag = O_WRONLY | O_CREAT | O_APPEND;
 
-    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    #if defined (MSDOS) || defined (OS2) || defined (WIN32) || defined (_WIN32) || defined (__CYGWIN__)
     if (strncmp (mode, "ab", 2) == 0) oflag |= O_BINARY;
     #endif
   }
@@ -322,7 +324,7 @@ bool hc_fopen_raw (HCFILE *fp, const char *path, const char *mode)
     oflag = O_RDONLY;
     fmode = -1;
 
-    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    #if defined (MSDOS) || defined (OS2) || defined (WIN32) || defined (_WIN32) || defined (__CYGWIN__)
     if (strncmp (mode, "rb", 2) == 0) oflag |= O_BINARY;
     #endif
   }
@@ -330,7 +332,7 @@ bool hc_fopen_raw (HCFILE *fp, const char *path, const char *mode)
   {
     oflag = O_WRONLY | O_CREAT | O_TRUNC;
 
-    #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(_WIN32) || defined(__CYGWIN__)
+    #if defined (MSDOS) || defined (OS2) || defined (WIN32) || defined (_WIN32) || defined (__CYGWIN__)
     if (strncmp (mode, "wb", 2) == 0) oflag |= O_BINARY;
     #endif
   }
@@ -410,13 +412,28 @@ size_t hc_fread (void *ptr, size_t size, size_t nmemb, HCFILE *fp)
   else if (fp->gfp)
   {
     n = gzfread (ptr, size, nmemb, fp->gfp);
+
+    // Double check to make sure that it successfully read 0 bytes instead of erroring
+    if (n == 0)
+    {
+      int errnum = Z_OK;
+
+      gzerror (fp->gfp, &errnum);
+
+      if (errnum != Z_OK)
+      {
+        return (size_t) -1;
+      }
+    }
+
+    fp->uncompressed_size += n;
   }
   else if (fp->ufp)
   {
     u64 len = (u64) size * nmemb;
     u64 pos = 0;
 
-    #if defined(_WIN) && !defined(_WIN64)
+    #if defined (_WIN) && !defined (_WIN64)
     /* check 2 GB limit with 32 bit build */
     if (len >= INT32_MAX) return n;
     #endif
@@ -447,7 +464,7 @@ size_t hc_fread (void *ptr, size_t size, size_t nmemb, HCFILE *fp)
     SRes res = SZ_OK;
     xzfile_t *xfp = fp->xfp;
 
-    #if defined(_WIN) && !defined(_WIN64)
+    #if defined (_WIN) && !defined (_WIN64)
     /* check 2 GB limit with 32 bit build */
     if (outLen >= INT32_MAX) return n;
     #endif
@@ -477,7 +494,7 @@ size_t hc_fread (void *ptr, size_t size, size_t nmemb, HCFILE *fp)
       if (inLeft == 0 && outLeft == 0)
       {
         /* partial read */
-        n = (size_t) (outPos / size);
+        n = (outPos / size);
         break;
       }
       outPos += outLeft;
@@ -579,7 +596,18 @@ int hc_fseek (HCFILE *fp, off_t offset, int whence)
   }
   else if (fp->xfp)
   {
-    /* TODO */
+    /* XZ files are compressed streams, seeking is limited */
+    if (offset == 0 && whence == SEEK_SET)
+    {
+      /* Rewind to beginning */
+      hc_rewind(fp);
+      r = 0;
+    }
+    else
+    {
+      /* Arbitrary seeking not supported for compressed XZ files */
+      r = -1;
+    }
   }
 
   return r;
@@ -647,11 +675,20 @@ int hc_fstat (HCFILE *fp, struct stat *buf)
 
   if (fp->gfp)
   {
-    /* TODO: For compressed files hc_ftell() reports uncompressed bytes, but hc_fstat() reports compressed bytes */
+    if (fp->uncompressed_size > 0)
+    {
+      buf->st_size = fp->uncompressed_size;
+    }
   }
   else if (fp->ufp)
   {
-    /* TODO: For compressed files hc_ftell() reports uncompressed bytes, but hc_fstat() reports compressed bytes */
+    unz_file_info file_info;
+
+    // Get metadata about the current file
+    if (unzGetCurrentFileInfo(fp->ufp, &file_info, NULL, 0, NULL, 0, NULL, 0) == UNZ_OK)
+    {
+      buf->st_size = (off_t) file_info.uncompressed_size;
+    }
   }
   else if (fp->xfp)
   {

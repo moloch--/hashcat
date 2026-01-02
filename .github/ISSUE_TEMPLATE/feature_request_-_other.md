@@ -24,8 +24,8 @@ A clear and concise description of what you expected to happen, ideally with moc
 
 **Hashcat version (please complete the following information):**
  - OS: [e.g. Linux]
- - Distribution: [e.g. Ubuntu 18.04]
- - Version: [e.g. 6.2.0]
+ - Distribution: [e.g. Ubuntu 24.04]
+ - Version: [e.g. 7.1.2]
 
 **Additional context**
 Add any other context or screenshots about the feature request here.

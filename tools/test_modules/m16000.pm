@@ -8,7 +8,7 @@
 use strict;
 use warnings;
 
-use Text::Iconv;
+use Encode;
 
 sub module_constraints { [[1, 8], [-1, -1], [-1, -1], [-1, -1], [-1, -1]] }
 
@@ -16,9 +16,7 @@ sub module_generate_hash
 {
   my $word = shift;
 
-  my $converter = Text::Iconv->new ("utf-8", "shift-jis");
-
-  $word = $converter->convert ($word);
+  $word = encode("shift_jis", $word);
 
   my $salt = substr ($word . '..', 1, 2);
 

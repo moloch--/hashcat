@@ -42,6 +42,11 @@ u32         module_salt_type      (MAYBE_UNUSED const hashconfig_t *hashconfig, 
 const char *module_st_hash        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_HASH;         }
 const char *module_st_pass        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_PASS;         }
 
+const char *module_usage_notice (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
+{
+  return "You can use https://github.com/hashcat/hashcat/blob/master/tools/apfs2hashcat.py to extract the hashes";
+}
+
 typedef struct apple_secure_notes
 {
   u32 Z_PK;
@@ -173,10 +178,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *ZCRYPTOSALT_pos = token.buf[3];
 
-  apple_secure_notes->ZCRYPTOSALT[ 0] = hex_to_u32 ((const u8 *) &ZCRYPTOSALT_pos[ 0]);
-  apple_secure_notes->ZCRYPTOSALT[ 1] = hex_to_u32 ((const u8 *) &ZCRYPTOSALT_pos[ 8]);
-  apple_secure_notes->ZCRYPTOSALT[ 2] = hex_to_u32 ((const u8 *) &ZCRYPTOSALT_pos[16]);
-  apple_secure_notes->ZCRYPTOSALT[ 3] = hex_to_u32 ((const u8 *) &ZCRYPTOSALT_pos[24]);
+  apple_secure_notes->ZCRYPTOSALT[ 0] = hex_to_u32 (&ZCRYPTOSALT_pos[ 0]);
+  apple_secure_notes->ZCRYPTOSALT[ 1] = hex_to_u32 (&ZCRYPTOSALT_pos[ 8]);
+  apple_secure_notes->ZCRYPTOSALT[ 2] = hex_to_u32 (&ZCRYPTOSALT_pos[16]);
+  apple_secure_notes->ZCRYPTOSALT[ 3] = hex_to_u32 (&ZCRYPTOSALT_pos[24]);
   apple_secure_notes->ZCRYPTOSALT[ 4] = 0;
   apple_secure_notes->ZCRYPTOSALT[ 5] = 0;
   apple_secure_notes->ZCRYPTOSALT[ 6] = 0;
@@ -202,16 +207,16 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *ZCRYPTOWRAPPEDKEY_pos = token.buf[5];
 
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[0] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[ 0]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[1] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[ 8]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[2] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[16]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[3] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[24]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[4] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[32]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[5] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[40]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[6] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[48]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[7] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[56]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[8] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[64]);
-  apple_secure_notes->ZCRYPTOWRAPPEDKEY[9] = hex_to_u32 ((const u8 *) &ZCRYPTOWRAPPEDKEY_pos[72]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[0] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[ 0]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[1] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[ 8]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[2] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[16]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[3] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[24]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[4] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[32]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[5] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[40]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[6] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[48]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[7] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[56]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[8] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[64]);
+  apple_secure_notes->ZCRYPTOWRAPPEDKEY[9] = hex_to_u32 (&ZCRYPTOWRAPPEDKEY_pos[72]);
 
   // fake salt
 
@@ -236,7 +241,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
 int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const void *digest_buf, MAYBE_UNUSED const salt_t *salt, MAYBE_UNUSED const void *esalt_buf, MAYBE_UNUSED const void *hook_salt_buf, MAYBE_UNUSED const hashinfo_t *hash_info, char *line_buf, MAYBE_UNUSED const int line_size)
 {
-  apple_secure_notes_t *apple_secure_notes = (apple_secure_notes_t *) esalt_buf;
+  const apple_secure_notes_t *apple_secure_notes = (const apple_secure_notes_t *) esalt_buf;
 
   const int out_len = snprintf (line_buf, line_size, "%s%u$16$%08x%08x%08x%08x$%u$%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x",
     SIGNATURE_APFS,
@@ -271,9 +276,12 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
+  module_ctx->module_usage_notice             = module_usage_notice;
   module_ctx->module_dgst_pos0                = module_dgst_pos0;
   module_ctx->module_dgst_pos1                = module_dgst_pos1;
   module_ctx->module_dgst_pos2                = module_dgst_pos2;

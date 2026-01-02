@@ -34,7 +34,7 @@ void Unpack::InitMT()
   {
     uint MaxItems=MaxUserThreads*UNP_BLOCKS_PER_THREAD;
     UnpThreadData=new UnpackThreadData[MaxItems];
-    memset(UnpThreadData,0,sizeof(UnpackThreadData)*MaxItems);
+    memset((void*)UnpThreadData,0,sizeof(UnpackThreadData)*MaxItems);
 
     for (uint I=0;I<MaxItems;I++)
     {

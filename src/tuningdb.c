@@ -56,8 +56,8 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
 
   if (user_options->usage         > 0)    return 0;
   if (user_options->backend_info  > 0)    return 0;
+  if (user_options->hash_info     > 0)    return 0;
 
-  if (user_options->hash_info    == true) return 0;
   if (user_options->keyspace     == true) return 0;
   if (user_options->left         == true) return 0;
   if (user_options->show         == true) return 0;
@@ -72,6 +72,8 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
 
   char **tuning_db_files = scan_directory (tuning_db_folder);
 
+  hcfree (tuning_db_folder);
+
   for (int i = 0; tuning_db_files[i] != NULL; i++)
   {
     char *tuning_db_file = tuning_db_files[i];
@@ -80,15 +82,27 @@ int tuning_db_init (hashcat_ctx_t *hashcat_ctx)
 
     const size_t dblen = strlen (tuning_db_file);
 
-    if (dblen < suflen) continue; // make sure to not do any out-of-boundary reads
+    if (dblen < suflen)
+    {
+      hcfree (tuning_db_file);
 
-    if (memcmp (tuning_db_file + dblen - suflen, TUNING_DB_SUFFIX, suflen) != 0) continue;
+      continue; // make sure to not do any out-of-boundary reads
+    }
+
+    if (memcmp (tuning_db_file + dblen - suflen, TUNING_DB_SUFFIX, suflen) != 0)
+    {
+      hcfree (tuning_db_file);
+
+      continue;
+    }
 
     HCFILE fp;
 
     if (hc_fopen (&fp, tuning_db_file, "rb") == false)
     {
       event_log_error (hashcat_ctx, "%s: %s", tuning_db_file, strerror (errno));
+
+      for (int j = 0; tuning_db_files[j] != NULL; j++) hcfree (tuning_db_files[j]);
 
       return -1;
     }
@@ -365,7 +379,7 @@ bool tuning_db_process_line (hashcat_ctx_t *hashcat_ctx, const char *line_buf, c
   return true;
 }
 
-tuning_db_entry_t *tuning_db_search_real (hashcat_ctx_t *hashcat_ctx, const char *device_name, const cl_device_type device_type, int attack_mode, const int hash_mode)
+static tuning_db_entry_t *tuning_db_search_real (hashcat_ctx_t *hashcat_ctx, const char *device_name, const cl_device_type device_type, int attack_mode, const int hash_mode)
 {
   tuning_db_t *tuning_db = hashcat_ctx->tuning_db;
 
@@ -409,10 +423,13 @@ tuning_db_entry_t *tuning_db_search_real (hashcat_ctx_t *hashcat_ctx, const char
 
   hcfree (device_name_nospace2);
 
-  // attack-mode 6 and 7 are attack-mode 1 basically
+  // attack-mode 6 and 7 are attack-kern 1
+  // attack-mode 8 and 9 are attack-kern 0
 
   if (attack_mode == 6) attack_mode = 1;
   if (attack_mode == 7) attack_mode = 1;
+  if (attack_mode == 8) attack_mode = 0;
+  if (attack_mode == 9) attack_mode = 0;
 
   // bsearch is not ideal but fast enough
 
@@ -501,5 +518,7 @@ tuning_db_entry_t *tuning_db_search (hashcat_ctx_t *hashcat_ctx, const char *dev
 
   entry = tuning_db_search_real (hashcat_ctx, device_name, device_type, attack_mode, hash_mode);
 
-  return entry;
+  if (entry) return entry;
+
+  return NULL;
 }

@@ -8,10 +8,22 @@
 use strict;
 use warnings;
 
-use Data::Types qw (is_count is_whole);
 use File::Basename;
 use FindBin;
 use List::Util 'shuffle';
+
+my $TYPES = [ 'edge', 'single', 'passthrough', 'potthrough', 'verify' ];
+
+my $TYPE = shift @ARGV;
+my $MODE = shift @ARGV;
+
+is_in_array ($TYPE, $TYPES) or usage_exit ();
+
+eval {
+    require Data::Types;  Data::Types->import(qw(is_count is_whole));
+    require Digest::MD4;  Digest::MD4->import('md4_hex');
+    1;
+} or die "Missing Perl modules, read: docs/hashcat-plugin-development-guide.md (search test.pl), and run: ./tools/install_modules.sh\n";
 
 # allows require by filename
 use lib "$FindBin::Bin/test_modules";
@@ -22,13 +34,6 @@ if (exists $ENV{"IS_OPTIMIZED"} && defined $ENV{"IS_OPTIMIZED"})
 {
   $IS_OPTIMIZED = $ENV{"IS_OPTIMIZED"};
 }
-
-my $TYPES = [ 'single', 'passthrough', 'potthrough', 'verify' ];
-
-my $TYPE = shift @ARGV;
-my $MODE = shift @ARGV;
-
-is_in_array ($TYPE, $TYPES) or usage_exit ();
 
 is_whole ($MODE) or die "Mode must be a number\n";
 
@@ -45,7 +50,13 @@ my $single_outputs = 8;
 
 my $constraints = get_module_constraints ();
 
-if ($TYPE eq 'single')
+if ($TYPE eq 'edge')
+{
+  usage_exit () if scalar @ARGV > 2;
+
+  edge (@ARGV);
+}
+elsif ($TYPE eq 'single')
 {
   single (@ARGV);
 }
@@ -66,6 +77,312 @@ elsif ($TYPE eq "verify")
 else
 {
   usage_exit ();
+}
+
+sub edge_format
+{
+  my $word_len = shift;
+  my $salt_len = shift;
+  my $attack_type = shift;
+  my $optimized = shift;
+
+  my $hash = "";
+  my $word = "";
+  my $salt = "";
+
+  my $cond = 0;
+
+  do
+  {
+    $word = random_numeric_string ($word_len) // "";
+    $salt = random_numeric_string ($salt_len) // "";
+
+    if (exists &{module_get_random_password}) # if hash mode requires special format of passwords
+    {
+      $word = module_get_random_password ($word);
+    }
+
+    $hash = module_generate_hash ($word, $salt);
+
+    $cond = 1;
+
+    if ($MODE == 30901 && length ($hash) != 34)
+    {
+      $cond = 0;
+    }
+
+  } while ($cond != 1);
+
+  if (defined $hash)
+  {
+    my $format = "%d,%d,%d,%d,%d,'%s','%s','%s'\n";
+
+    printf ($format, $MODE, $attack_type, $optimized, $word_len, $salt_len, $word, $salt, $hash);
+  }
+}
+
+sub edge
+{
+  my $attack_type = shift // 0;
+  my $optimized = shift // 0;
+
+  my @attack_types = (0, 1, 3, 6, 7);
+
+  if (not grep $_ == $attack_type, @attack_types)
+  {
+    return -1;
+  }
+
+  if ($optimized != 0 && $optimized != 1)
+  {
+    return -1;
+  }
+
+  my $idx_max = 0;
+  my $idx = 0;
+
+  my $word_min = ($optimized == 1) ? $constraints->[2]->[0] : $constraints->[0]->[0];
+  my $word_max = ($optimized == 1) ? $constraints->[2]->[1] : $constraints->[0]->[1];
+
+  my $salt_min = ($optimized == 1) ? $constraints->[3]->[0] : $constraints->[1]->[0];
+  my $salt_max = ($optimized == 1) ? $constraints->[3]->[1] : $constraints->[1]->[1];
+
+  my $comb_min = ($optimized == 1) ? $constraints->[4]->[0] : -1;
+  my $comb_max = ($optimized == 1) ? $constraints->[4]->[1] : -1;
+
+  if ($attack_type != 3)
+  {
+    if ($optimized == 1)
+    {
+      if ($word_min != $word_max && $word_max > 31)
+      {
+        $word_max = 31;
+      }
+    }
+  }
+
+  if ($attack_type != 0)
+  {
+    if ($word_min < 2)
+    {
+      $word_min = 2;
+    }
+  }
+
+  my $word_len = 0;
+  my $salt_len = 0;
+
+  # word_min, salt_min
+  # word_min, salt_max
+  # word_max, salt_min
+  # word_max, salt_max
+
+  if ($word_min != -1)
+  {
+    if ($salt_min != $salt_max)
+    {
+      if ($salt_min != -1) # word_min, salt_min
+      {
+        $word_len = $word_min;
+        $salt_len = $salt_min;
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+      }
+
+      if ($salt_max != -1) # word_min, salt_max
+      {
+        my $salt_max_tmp = $salt_max;
+
+        if ($optimized == 1)
+        {
+          if ($salt_max_tmp > 51)
+          {
+            $salt_max_tmp = 51;
+          }
+
+          if ($comb_max != -1)
+          {
+            if (($word_len + $salt_max_tmp) > $comb_max)
+            {
+              my $off = $word_len + $salt_max_tmp - $comb_max;
+
+              if ($salt_max_tmp > $off)
+              {
+                $salt_max_tmp -= $off;
+              }
+            }
+          }
+        }
+
+        $word_len = $word_min;
+        $salt_len = $salt_max_tmp;
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+      }
+    }
+    else
+    {
+      if ($salt_min != -1) # word_min, salt_min/salt_max (are the same)
+      {
+        $word_len = $word_min;
+        $salt_len = $salt_min;
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+      }
+      else
+      {
+        # no salt
+
+        $word_len = $word_min;
+        $salt_len = 0;
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+      }
+    }
+  }
+
+  if ($word_max != -1)
+  {
+    if ($salt_min != $salt_max)
+    {
+      my $last_word_len = -1;
+      my $last_salt_len = -1;
+
+      if ($salt_min != -1) # word_max, salt_min
+      {
+        $word_len = $word_max;
+        $salt_len = $salt_min;
+
+        if ($optimized == 1)
+        {
+          my $comb_max_cur = 55;
+
+          if ($comb_max != -1)
+          {
+            $comb_max_cur = $comb_max;
+          }
+
+          if (($word_len + $salt_len) > $comb_max_cur)
+          {
+            my $off = $word_len + $salt_len - $comb_max_cur;
+
+            if ($word_len > $off)
+            {
+              $word_len -= $off;
+            }
+            else
+            {
+              print ("ERROR with MODE $MODE, WORD $word_len, SALT $salt_len, MAX $comb_max_cur");
+              exit  (1);
+            }
+          }
+        }
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+
+        # save last
+        $last_word_len = $word_len;
+        $last_salt_len = $salt_len;
+      }
+
+      if ($salt_max != -1) # word_max, salt_max
+      {
+        $word_len = $word_max;
+        $salt_len = $salt_max;
+
+        if ($optimized == 1)
+        {
+          # limit comb_max to 55 if is not set
+          my $comb_max_cur = 55;
+
+          if ($comb_max != -1)
+          {
+            $comb_max_cur = $comb_max;
+          }
+
+          # limit salt_max to 51
+          my $salt_max_tmp = $salt_len;
+
+          if ($salt_max_tmp > 51)
+          {
+            $salt_max_tmp = 51;
+          }
+
+          if (($word_len + $salt_max_tmp) > $comb_max_cur)
+          {
+            my $off = $word_len + $salt_max_tmp - $comb_max_cur;
+
+            if ($last_word_len == $word_len)
+            {
+              $word_len -= $off;
+              if ($word_len < $word_min)
+              {
+                $off = $word_min - $word_len;
+                $word_len = $word_min;
+                $salt_max_tmp -= $off;
+              }
+            }
+            else
+            {
+              $salt_max_tmp -= $off;
+              if ($salt_max_tmp < $salt_min)
+              {
+                $off = $salt_min - $salt_max_tmp;
+                $salt_max_tmp = $salt_min;
+                $word_len -= $off;
+              }
+            }
+          }
+
+          $salt_len = $salt_max_tmp;
+        }
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+
+        # reset last
+        $last_word_len = -1;
+        $last_salt_len = -1;
+      }
+    }
+    else
+    {
+      if ($salt_min != -1) # word_max, salt_min/salt_max (are the same)
+      {
+        $word_len = $word_max;
+        $salt_len = $salt_max;
+
+        if ($optimized == 1)
+        {
+          if ($comb_max != -1)
+          {
+            if (($word_len + $salt_len) > $comb_max)
+            {
+              my $off = $word_len + $salt_len - $comb_max;
+
+              if ($word_len > $off)
+              {
+                $word_len -= $off;
+
+                if ($word_len < $word_min)
+                {
+                  $word_len = $word_min;
+                }
+              }
+            }
+          }
+        }
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+      }
+      else
+      {
+        $word_len = $word_max;
+        $salt_len = 0;
+
+        edge_format ($word_len, $salt_len, $attack_type, $optimized);
+      }
+    }
+  }
 }
 
 sub single
@@ -159,6 +476,13 @@ sub single
   {
     for my $salt (sort { length $a <=> length $b } keys %{$db_prev->{$word}})
     {
+      if ($MODE == 31600 || $MODE == 31500)
+      {
+        my $utf16le = encode("UTF-16LE", decode("utf-8", $word));
+
+        $word = md4_hex ($utf16le);
+      }
+
       my $hash = module_generate_hash ($word, $salt);
 
       # possible if the requested length is not supported by algorithm
@@ -592,10 +916,17 @@ sub usage_exit
 
   print "\n"
     . "Usage:\n"
+    . " $f edge        <mode> [attack-type] [optimized]\n"
     . " $f single      <mode> [length]\n"
     . " $f passthrough <mode>\n"
     . " $f potthrough  <mode>\n"
     . " $f verify      <mode> <hashfile> <cracksfile> <outfile>\n"
+    . "\n"
+    . "Edge:\n"
+    . " Generates edge case for selected <mode>.\n"
+    . " Will be generated a list of value separated by comma to stdout:\n"
+    . " <mode>,<attack-type>,<optimized>,<word_len>,<salt_len>,<word>,<salt>,<hash>\n"
+    . " The output can be processed by the test_edge.sh script.\n"
     . "\n"
     . "Single:\n"
     . " Generates up to 32 hashes of random numbers of incrementing length, or up to 32\n"

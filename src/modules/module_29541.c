@@ -43,6 +43,11 @@ u32         module_salt_type      (MAYBE_UNUSED const hashconfig_t *hashconfig, 
 const char *module_st_hash        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_HASH;         }
 const char *module_st_pass        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_PASS;         }
 
+const char *module_usage_notice (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
+{
+  return USAGE_NOTICE_LUKS;
+}
+
 #define LUKS_STRIPES        (                                   4000)
 #define LUKS_SALT_LEN       (                                     32)
 #define LUKS_SALT_HEX_LEN   (                      LUKS_SALT_LEN * 2)
@@ -133,16 +138,6 @@ u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED c
   const u64 tmp_size = (const u64) sizeof (luks_tmp_t);
 
   return tmp_size;
-}
-
-u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  // this overrides the reductions of PW_MAX in case optimized kernel is selected
-  // IOW, even in optimized kernel mode it support length 256
-
-  const u32 pw_max = PW_MAX;
-
-  return pw_max;
 }
 
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)
@@ -305,11 +300,11 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
 int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const void *digest_buf, MAYBE_UNUSED const salt_t *salt, MAYBE_UNUSED const void *esalt_buf, MAYBE_UNUSED const void *hook_salt_buf, MAYBE_UNUSED const hashinfo_t *hash_info, char *line_buf, MAYBE_UNUSED const int line_size)
 {
-  luks_t *luks = (luks_t *) esalt_buf;
+  const luks_t *luks = (const luks_t *) esalt_buf;
 
   // cipher mode
 
-  char *cipher_mode = "";
+  const char *cipher_mode = "";
 
   switch (luks->cipher_mode)
   {
@@ -339,19 +334,19 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   // salt
 
-  char salt_buf[LUKS_SALT_HEX_LEN + 1] = { 0 };
+  char *salt_buf = (char *) hcmalloc (LUKS_SALT_HEX_LEN + 1);
 
   hex_encode ((const u8 *) salt->salt_buf, LUKS_SALT_LEN, (u8 *) salt_buf);
 
   // af
 
-  char af_buf[LUKS_AF_MAX_HEX_LEN + 1] = { 0 };
+  char *af_buf = (char *) hcmalloc (LUKS_AF_MAX_HEX_LEN + 1);
 
   hex_encode ((const u8 *) luks->af_buf, luks->af_len, (u8 *) af_buf);
 
   // ct
 
-  char ct_buf[LUKS_CT_HEX_LEN + 1] = { 0 };
+  char *ct_buf = (char *) hcmalloc (LUKS_CT_HEX_LEN + 1);
 
   hex_encode ((const u8 *) luks->ct_buf, LUKS_CT_LEN, (u8 *) ct_buf);
 
@@ -365,6 +360,10 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     salt_buf,
     af_buf,
     ct_buf);
+
+  hcfree (salt_buf);
+  hcfree (af_buf);
+  hcfree (ct_buf);
 
   return line_len;
 }
@@ -380,9 +379,12 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
+  module_ctx->module_usage_notice             = module_usage_notice;
   module_ctx->module_dgst_pos0                = module_dgst_pos0;
   module_ctx->module_dgst_pos1                = module_dgst_pos1;
   module_ctx->module_dgst_pos2                = module_dgst_pos2;
@@ -436,7 +438,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;
-  module_ctx->module_pw_max                   = module_pw_max;
+  module_ctx->module_pw_max                   = MODULE_DEFAULT;
   module_ctx->module_pw_min                   = MODULE_DEFAULT;
   module_ctx->module_salt_max                 = MODULE_DEFAULT;
   module_ctx->module_salt_min                 = MODULE_DEFAULT;

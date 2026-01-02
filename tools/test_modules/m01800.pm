@@ -7,6 +7,7 @@
 
 use strict;
 use warnings;
+use Crypt::Passwd::XS;
 
 sub module_constraints { [[0, 256], [0, 16], [0, 15], [0, 16], [-1, -1]] }
 
@@ -20,11 +21,11 @@ sub module_generate_hash
 
   if (defined $iter)
   {
-    $hash_buf = crypt ($word, "\$6\$rounds=$iter\$$salt\$");
+    $hash_buf = Crypt::Passwd::XS::unix_sha512_crypt ($word, "\$6\$rounds=$iter\$$salt\$");
   }
   else
   {
-    $hash_buf = crypt ($word, "\$6\$$salt\$");
+    $hash_buf = Crypt::Passwd::XS::unix_sha512_crypt ($word, "\$6\$$salt\$");
   }
 
   my $hash = sprintf ("%s", $hash_buf);

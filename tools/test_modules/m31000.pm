@@ -10,7 +10,7 @@ use warnings;
 
 use Crypt::Digest::BLAKE2s_256 qw (blake2s_256_hex);
 
-sub module_constraints { [[0, 128], [-1, -1], [0, 64], [-1, -1], [-1, -1]] }
+sub module_constraints { [[0, 128], [-1, -1], [0, 55], [-1, -1], [-1, -1]] }
 
 sub module_generate_hash
 {

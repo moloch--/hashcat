@@ -26,8 +26,7 @@ static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
                                   | OPTI_TYPE_SLOW_HASH_SIMD_LOOP;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_PT_GENERATE_LE
-                                  | OPTS_TYPE_BINARY_HASHFILE
-                                  | OPTS_TYPE_MAXIMUM_THREADS;
+                                  | OPTS_TYPE_BINARY_HASHFILE;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "hashcat";
 static const char *ST_HASH        = "de7d6725cc4c910a7e96307df69d41335e64d17b4425ca5bf1730f27820f92df9f20f3e855d8566eb5255927153f987348789666c8e563e366a09e68a8126b11c25ac817b2706dde5cec3946e64332b21b41b928985c1a637559ead5b4fecac74ff0d625ef6d8be93dea3eaca05394f23ee9e079d3504a77b4c0b22d3cfcafa9c670966bfa3a5f30539250d97267a9e56b5a1437b1fd2ce58f4ab78b52ba61d01c28d7a6b726d92c8819711c70f820690cf2b9bbef75f196ba87fb5f72a29e213096a8be3b6e6d0ff3dc22563dc9e7d95be68ad169c233289fccfdc2f5528c658cb178b4e78d54e96cb452859b01dd756ca0245bdd586fb450e84988071428c80af0a6dc5f16dea8094da3acb51ac5d2a710414256b2423e0333584437ea9a65a07f06bd241103a478d137e9a274a78a19d3ca121f1bc10e4c9e5fc277d23107db1fb447f71ba0f92b20e3ead77cffaca25f772182705a75e500d9aab3996bfda042f4bdfe35a3a477e355c76a711ad0f64848d6144073ce6ec4152c87973fc3e69626523463812061c51f51fc08487e8a4dbae1ca7965c11f222c607688b3384c5c29d4fe91d14d2cc940a6a9d94486d1823261928d88f56fe00e206d7a31734de0217afd38afa3d2cf3499c2dcff13332a369c4b1f39867f6dfc83ec32d19b931b082f07acac7e70bdd537e8432245c11662d89ec3cc97e582de5d2cc6bde7";
@@ -78,19 +77,18 @@ typedef struct tc
 static const int   ROUNDS_TRUECRYPT_1K         = 1000;
 static const float MIN_SUFFICIENT_ENTROPY_FILE = 7.0f;
 
-u32 module_kernel_threads_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  const u32 kernel_threads_max = 64;
-
-  return kernel_threads_max;
-}
-
 bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
-  // AMD Radeon Pro W5700X, Metal.Version.: 261.13, compiler hangs
-  if (device_param->is_metal == true)
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
   {
-    return true;
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: failed to create 'm06233_init' pipeline, Compilation failed
+        return true;
+      }
+    }
   }
 
   return false;
@@ -173,44 +171,6 @@ int module_hash_binary_parse (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE
 
   hcfree (in);
 
-  // keyfiles
-
-  tc_t *tc = (tc_t *) hash->esalt;
-
-  if (user_options->truecrypt_keyfiles)
-  {
-    char *keyfiles = hcstrdup (user_options->truecrypt_keyfiles);
-
-    char *saveptr = NULL;
-
-    char *keyfile = strtok_r (keyfiles, ",", &saveptr);
-
-    while (keyfile)
-    {
-      if (hc_path_read (keyfile))
-      {
-        cpu_crc32 (keyfile, (u8 *) tc->keyfile_buf16,  64);
-        cpu_crc32 (keyfile, (u8 *) tc->keyfile_buf32, 128);
-      }
-
-      keyfile = strtok_r ((char *) NULL, ",", &saveptr);
-    }
-
-    hcfree (keyfiles);
-
-    tc->keyfile_enabled = 1;
-  }
-
-  // keyboard layout mapping
-
-  if (user_options->keyboard_layout_mapping)
-  {
-    if (hc_path_read (user_options->keyboard_layout_mapping))
-    {
-      initialize_keyboard_layout_mapping (user_options->keyboard_layout_mapping, tc->keyboard_layout_mapping_buf, &tc->keyboard_layout_mapping_cnt);
-    }
-  }
-
   return 1;
 }
 
@@ -251,6 +211,49 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   return (PARSER_OK);
 }
 
+int module_hash_decode_postprocess (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
+{
+  tc_t *tc = (tc_t *) esalt_buf;
+
+  // keyfiles
+
+  if (user_options->truecrypt_keyfiles)
+  {
+    char *keyfiles = hcstrdup (user_options->truecrypt_keyfiles);
+
+    char *saveptr = NULL;
+
+    char *keyfile = strtok_r (keyfiles, ",", &saveptr);
+
+    while (keyfile)
+    {
+      if (hc_path_read (keyfile))
+      {
+        cpu_crc32 (keyfile, (u8 *) tc->keyfile_buf16,  64);
+        cpu_crc32 (keyfile, (u8 *) tc->keyfile_buf32, 128);
+      }
+
+      keyfile = strtok_r ((char *) NULL, ",", &saveptr);
+    }
+
+    hcfree (keyfiles);
+
+    tc->keyfile_enabled = 1;
+  }
+
+  // keyboard layout mapping
+
+  if (user_options->keyboard_layout_mapping)
+  {
+    if (hc_path_read (user_options->keyboard_layout_mapping))
+    {
+      initialize_keyboard_layout_mapping (user_options->keyboard_layout_mapping, tc->keyboard_layout_mapping_buf, &tc->keyboard_layout_mapping_cnt);
+    }
+  }
+
+  return (PARSER_OK);
+}
+
 void module_init (module_ctx_t *module_ctx)
 {
   module_ctx->module_context_size             = MODULE_CONTEXT_SIZE_CURRENT;
@@ -262,6 +265,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -279,7 +284,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_hash_binary_count        = MODULE_DEFAULT;
   module_ctx->module_hash_binary_parse        = module_hash_binary_parse;
   module_ctx->module_hash_binary_save         = MODULE_DEFAULT;
-  module_ctx->module_hash_decode_postprocess  = MODULE_DEFAULT;
+  module_ctx->module_hash_decode_postprocess  = module_hash_decode_postprocess;
   module_ctx->module_hash_decode_potfile      = MODULE_DEFAULT;
   module_ctx->module_hash_decode_zero_hash    = MODULE_DEFAULT;
   module_ctx->module_hash_decode              = module_hash_decode;
@@ -306,7 +311,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_kernel_accel_min         = MODULE_DEFAULT;
   module_ctx->module_kernel_loops_max         = MODULE_DEFAULT;
   module_ctx->module_kernel_loops_min         = MODULE_DEFAULT;
-  module_ctx->module_kernel_threads_max       = module_kernel_threads_max;
+  module_ctx->module_kernel_threads_max       = MODULE_DEFAULT;
   module_ctx->module_kernel_threads_min       = MODULE_DEFAULT;
   module_ctx->module_kern_type                = module_kern_type;
   module_ctx->module_kern_type_dynamic        = MODULE_DEFAULT;

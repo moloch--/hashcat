@@ -9,6 +9,7 @@
 #include "bitops.h"
 #include "convert.h"
 #include "shared.h"
+#include "memory.h"
 
 static const u32   ATTACK_EXEC    = ATTACK_EXEC_INSIDE_KERNEL;
 static const u32   DGST_POS0      = 0;
@@ -22,8 +23,7 @@ static const u64   KERN_TYPE      = 13100;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
                                   | OPTI_TYPE_NOT_ITERATED;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
-                                  | OPTS_TYPE_PT_GENERATE_LE
-                                  | OPTS_TYPE_MAXIMUM_THREADS;
+                                  | OPTS_TYPE_PT_GENERATE_LE;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "hashcat";
 static const char *ST_HASH        = "$krb5tgs$23$*user$realm$test/spn*$b548e10f5694ae018d7ad63c257af7dc$35e8e45658860bc31a859b41a08989265f4ef8afd75652ab4d7a30ef151bf6350d879ae189a8cb769e01fa573c6315232b37e4bcad9105520640a781e5fd85c09615e78267e494f433f067cc6958200a82f70627ce0eebc2ac445729c2a8a0255dc3ede2c4973d2d93ac8c1a56b26444df300cb93045d05ff2326affaa3ae97f5cd866c14b78a459f0933a550e0b6507bf8af27c2391ef69fbdd649dd059a4b9ae2440edd96c82479645ccdb06bae0eead3b7f639178a90cf24d9a";
@@ -55,37 +55,35 @@ typedef struct krb5tgs
 
 static const char *SIGNATURE_KRB5TGS = "$krb5tgs$";
 
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+{
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
+  {
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: self-test failed
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
   char *jit_build_options = NULL;
 
-  u32 native_threads = 0;
+  // We must override whatever tuningdb entry or -T value was set by the user with this
+  // That's because of RC code in inc_cipher_rc4.cl has this for GPU (different on CPU):
+  // #define KEY32(t,k) (((k) * 32) + ((t) & 31) + (((t) / 32) * 2048))
+  // #define KEY8(t,k) (((k) & 3) + (((k) / 4) * 128) + (((t) & 31) * 4) + (((t) / 32) * 8192))
 
-  if (device_param->opencl_device_type & CL_DEVICE_TYPE_CPU)
-  {
-    native_threads = 1;
-  }
-  else if (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU)
-  {
-    #if defined (__APPLE__)
+  u32 native_threads = (device_param->opencl_device_type & CL_DEVICE_TYPE_CPU) ? 1 : 32;
 
-    native_threads = 32;
-
-    #else
-
-    if (device_param->device_local_mem_size < 49152)
-    {
-      native_threads = MIN (device_param->kernel_preferred_wgs_multiple, 32); // We can't just set 32, because Intel GPU need 8
-    }
-    else
-    {
-      native_threads = device_param->kernel_preferred_wgs_multiple;
-    }
-
-    #endif
-  }
-
-  hc_asprintf (&jit_build_options, "-D FIXED_LOCAL_SIZE=%u -D _unroll", native_threads);
+  hc_asprintf (&jit_build_options, "-D FIXED_LOCAL_SIZE=%u", native_threads);
 
   return jit_build_options;
 }
@@ -133,8 +131,8 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   {
     if (line_buf[token.len[0] + 3] == '*')
     {
-      char *account_info_start = (char *) line_buf + 12; // we want the * char included
-      char *account_info_stop  = strchr ((const char *) account_info_start + 1, '*');
+      const char *account_info_start = line_buf + 12; // we want the * char included
+      char *account_info_stop  = strchr (account_info_start + 1, '*');
 
       if (account_info_stop == NULL) return (PARSER_SEPARATOR_UNMATCHED);
 
@@ -307,13 +305,13 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 {
   const krb5tgs_t *krb5tgs = (const krb5tgs_t *) esalt_buf;
 
-  char data[5120 * 4 * 2] = { 0 };
+  char *data = (char *) hcmalloc (5120 * 4 * 2);
 
   for (u32 i = 0, j = 0; i < krb5tgs->edata2_len; i += 1, j += 2)
   {
-    u8 *ptr_edata2 = (u8 *) krb5tgs->edata2;
+    const u8 *ptr_edata2 = (const u8 *) krb5tgs->edata2;
 
-    sprintf (data + j, "%02x", ptr_edata2[i]);
+    snprintf (data + j, 3, "%02x", ptr_edata2[i]);
   }
 
   int line_len;
@@ -324,7 +322,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   {
     line_len = snprintf (line_buf, line_size, "%s23$%s%08x%08x%08x%08x$%s",
       SIGNATURE_KRB5TGS,
-      (char *) krb5tgs->account_info,
+      (const char *) krb5tgs->account_info,
       byte_swap_32 (krb5tgs->checksum[0]),
       byte_swap_32 (krb5tgs->checksum[1]),
       byte_swap_32 (krb5tgs->checksum[2]),
@@ -335,13 +333,15 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   {
     line_len = snprintf (line_buf, line_size, "%s%s:%08x%08x%08x%08x$%s",
       SIGNATURE_KRB5TGS,
-      (char *) krb5tgs->account_info,
+      (const char *) krb5tgs->account_info,
       byte_swap_32 (krb5tgs->checksum[0]),
       byte_swap_32 (krb5tgs->checksum[1]),
       byte_swap_32 (krb5tgs->checksum[2]),
       byte_swap_32 (krb5tgs->checksum[3]),
       data);
   }
+
+  hcfree (data);
 
   return line_len;
 }
@@ -357,6 +357,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -422,6 +424,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = MODULE_DEFAULT;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

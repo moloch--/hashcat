@@ -16,17 +16,20 @@
 #include <windows.h>
 #else
 #include <termios.h>
-#if defined (__APPLE__)
+#if defined (__APPLE__)   || defined (__OpenBSD__)   || defined (__NetBSD__) || \
+    defined (__FreeBSD__) || defined (__DragonFly__)
 #include <sys/ioctl.h>
-#endif // __APPLE__
+#include <sys/sysctl.h>
+#endif
 #endif // _WIN
 
-#if !defined (_WIN) && !defined (__CYGWIN__) && !defined (__MSYS__)
+#if defined (_POSIX)
 #include <sys/utsname.h>
-#if !defined (__linux__)
-#include <sys/sysctl.h>
-#endif // ! __linux__
-#endif // ! _WIN && | __CYGWIN__ && ! __MSYS__
+#if !defined (__APPLE__)   && !defined (__OpenBSD__)   && !defined (__NetBSD__) && \
+    !defined (__FreeBSD__) && !defined (__DragonFly__)
+#include <sys/sysinfo.h>
+#endif
+#endif // _POSIX
 
 void welcome_screen (hashcat_ctx_t *hashcat_ctx, const char *version_tag);
 void goodbye_screen (hashcat_ctx_t *hashcat_ctx, const time_t proc_start, const time_t proc_stop);
@@ -36,7 +39,11 @@ int setup_console (void);
 void send_prompt  (hashcat_ctx_t *hashcat_ctx);
 void clear_prompt (hashcat_ctx_t *hashcat_ctx);
 
+#if defined (_WIN32) || defined (__WIN32__)
+HC_API_CALL DWORD thread_keypress (void *p);
+#else
 HC_API_CALL void *thread_keypress (void *p);
+#endif
 
 #if defined (_WIN)
 void SetConsoleWindowSize (const int x);

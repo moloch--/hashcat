@@ -107,7 +107,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     iter = hc_strtoul ((const char *) token.buf[1] + 2, NULL, 10);
   }
 
-  // iter++; the additinal round is added in the init kernel
+  // iter++; the additional round is added in the init kernel
 
   salt->salt_iter = iter;
 
@@ -115,14 +115,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   if (token.len[2] != 64) return (PARSER_HASH_LENGTH);
 
-  digest[0] = hex_to_u32 ((const u8 *) token.buf[2] +  0);
-  digest[1] = hex_to_u32 ((const u8 *) token.buf[2] +  8);
-  digest[2] = hex_to_u32 ((const u8 *) token.buf[2] + 16);
-  digest[3] = hex_to_u32 ((const u8 *) token.buf[2] + 24);
-  digest[4] = hex_to_u32 ((const u8 *) token.buf[2] + 32);
-  digest[5] = hex_to_u32 ((const u8 *) token.buf[2] + 40);
-  digest[6] = hex_to_u32 ((const u8 *) token.buf[2] + 48);
-  digest[7] = hex_to_u32 ((const u8 *) token.buf[2] + 56);
+  digest[0] = hex_to_u32 (token.buf[2] +  0);
+  digest[1] = hex_to_u32 (token.buf[2] +  8);
+  digest[2] = hex_to_u32 (token.buf[2] + 16);
+  digest[3] = hex_to_u32 (token.buf[2] + 24);
+  digest[4] = hex_to_u32 (token.buf[2] + 32);
+  digest[5] = hex_to_u32 (token.buf[2] + 40);
+  digest[6] = hex_to_u32 (token.buf[2] + 48);
+  digest[7] = hex_to_u32 (token.buf[2] + 56);
 
   // salt
 
@@ -196,6 +196,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

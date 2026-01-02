@@ -45,6 +45,11 @@ u32         module_salt_type      (MAYBE_UNUSED const hashconfig_t *hashconfig, 
 const char *module_st_hash        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_HASH;         }
 const char *module_st_pass        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_PASS;         }
 
+const char *module_usage_notice (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
+{
+  return USAGE_NOTICE_GPG;
+}
+
 typedef struct gpg
 {
   u32 cipher_algo;
@@ -77,6 +82,23 @@ typedef struct gpg_tmp
 } gpg_tmp_t;
 
 static const char *SIGNATURE_GPG = "$gpg$";
+
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+{
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
+  {
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: failed to create 'm17020_loop' pipeline, timeout reached
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
 
 u64 module_esalt_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
@@ -246,7 +268,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const int enc_data_size = hc_strtoul ((const char *) token.buf[2], NULL, 10);
 
-  const int encrypted_data_size = hex_decode ((const u8 *) token.buf[4], token.len[4], (u8 *) gpg->encrypted_data);
+  const int encrypted_data_size = hex_decode (token.buf[4], token.len[4], (u8 *) gpg->encrypted_data);
 
   if (enc_data_size != encrypted_data_size) return (PARSER_CT_LENGTH);
 
@@ -270,7 +292,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   if (hc_strtoul ((const char *) token.buf[9], NULL, 10) != sizeof (gpg->iv)) return (PARSER_IV_LENGTH);
 
-  const int iv_size = hex_decode ((const u8 *) token.buf[10], token.len[10], (u8 *) gpg->iv);
+  const int iv_size = hex_decode (token.buf[10], token.len[10], (u8 *) gpg->iv);
 
   if (iv_size != sizeof (gpg->iv)) return (PARSER_IV_LENGTH);
 
@@ -284,7 +306,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   // Salt Value
 
-  salt->salt_len = hex_decode ((const u8 *) token.buf[12], token.len[12], (u8 *) salt->salt_buf);
+  salt->salt_len = hex_decode (token.buf[12], token.len[12], (u8 *) salt->salt_buf);
 
   if (salt->salt_len != 8) return (PARSER_SALT_LENGTH);
 
@@ -302,6 +324,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   const gpg_t *gpg = (const gpg_t *) esalt_buf;
 
   u8 encrypted_data[(384 * 8) + 1];
+  memset(encrypted_data, 0, 384*8+1); // always initialize to zero
 
   hex_encode ((const u8 *) gpg->encrypted_data, gpg->encrypted_data_size, (u8 *) encrypted_data);
 
@@ -338,9 +361,12 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = module_deep_comp_kernel;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
+  module_ctx->module_usage_notice             = module_usage_notice;
   module_ctx->module_dgst_pos0                = module_dgst_pos0;
   module_ctx->module_dgst_pos1                = module_dgst_pos1;
   module_ctx->module_dgst_pos2                = module_dgst_pos2;
@@ -403,6 +429,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = module_tmp_size;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

@@ -25,8 +25,7 @@ static const u64   KERN_TYPE      = 6212; // old kernel used here
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
                                   | OPTI_TYPE_SLOW_HASH_SIMD_LOOP;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
-                                  | OPTS_TYPE_PT_GENERATE_LE
-                                  | OPTS_TYPE_MP_MULTI_DISABLE;
+                                  | OPTS_TYPE_PT_GENERATE_LE;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "hashcat";
 static const char *ST_HASH        = "$truecrypt$d6e1644acd373e6fdb8ccaaeab0c400d22eaa0b02e2a6649e065ad50f91e2f81fc5e1600d1cdf3b4ee72a7326a9a28d336ec65adf2d54661e1a609dd9941279f$d64a9c513dfb0192734fc1e1014cdd0a399e89a0860c4077463c18609f5218254edd998adb11a02271723d1aa094550df385dd8e080cb42ed1349f69c0a6bad4b37e6dab1effbe0095471a8d640679422fe1533a21f10cb6d15e5ee8cde78e677acf3d09d008e9fbf57f09c1c57f19e51ff54631e0e2adc2ee2832425c1ec718d96a17df7e55aceffb7b23a1872f32795d4491c739e21b01e19a1b7dfcb22709c9d9302154462664a668ea635664df65804bf680ff07026d6f5b225762a3a270df832d47e7feb6277a228454a3ba9b5bbade23ecaec0eaf31ad1dbac31754c970a212bd44c9278bc6076f096a2eed602e04a70c6f7fa94ef4e75299692e5dcc6f1a7e6032b9b765e9e61faeed3f9efacc0a15b1817e74d48ec11a13d15811c7e2c4d12f36d35a04131d02f14184fc15bc20e79115dc7c980b681a19a225964469787df481b68a8f722f2bd3115dbbcb3c8ac1b07d742f78f30635dea29dfb1db83e89fc85a30b0379fc8aa69a4ea94c99052685d38c9559a1246284cdc32c5110eb8c6741352cd42e09e6389d4765c58aa84d51867cf86fba69d29eac1cd7fac2f36603d2fb2af146c5d4c2bedb4f6c6d0f387f0a8d635e33384df60f8d2415b";
@@ -79,18 +78,13 @@ static const int   ROUNDS_TRUECRYPT_2K         = 2000;
 static const float MIN_SUFFICIENT_ENTROPY_FILE = 7.0f;
 static const char *SIGNATURE_TRUECRYPT         = "$truecrypt$";
 
-bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
-  // AMD Radeon Pro W5700X Compute Engine; 1.2 (Apr 22 2021 21:54:44); 11.3.1; 20E241
-  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
-  {
-    if (device_param->is_metal == false)
-    {
-      return true;
-    }
-  }
+  char *jit_build_options = NULL;
 
-  return false;
+  hc_asprintf (&jit_build_options, "-D NO_FUNNELSHIFT");
+
+  return jit_build_options;
 }
 
 u64 module_esalt_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
@@ -228,7 +222,7 @@ int module_hash_decode_postprocess (MAYBE_UNUSED const hashconfig_t *hashconfig,
 
 int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const void *digest_buf, MAYBE_UNUSED const salt_t *salt, MAYBE_UNUSED const void *esalt_buf, MAYBE_UNUSED const void *hook_salt_buf, MAYBE_UNUSED const hashinfo_t *hash_info, char *line_buf, MAYBE_UNUSED const int line_size)
 {
-  tc_t *tc = (tc_t *) esalt_buf;
+  const tc_t *tc = (const tc_t *) esalt_buf;
 
   // salt
 
@@ -263,6 +257,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -301,7 +297,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_hook23                   = MODULE_DEFAULT;
   module_ctx->module_hook_salt_size           = MODULE_DEFAULT;
   module_ctx->module_hook_size                = MODULE_DEFAULT;
-  module_ctx->module_jit_build_options        = MODULE_DEFAULT;
+  module_ctx->module_jit_build_options        = module_jit_build_options;
   module_ctx->module_jit_cache_disable        = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_max         = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_min         = MODULE_DEFAULT;
@@ -328,6 +324,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = module_tmp_size;
-  module_ctx->module_unstable_warning         = module_unstable_warning;
+  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

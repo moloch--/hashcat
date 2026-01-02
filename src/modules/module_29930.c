@@ -149,15 +149,15 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *iv_pos = token.buf[3];
 
-  encdatavault->iv[0] = byte_swap_32 (hex_to_u32 ((const u8 *) &iv_pos[0]));
-  encdatavault->iv[1] = byte_swap_32 (hex_to_u32 ((const u8 *) &iv_pos[8]));
+  encdatavault->iv[0] = byte_swap_32 (hex_to_u32 (&iv_pos[0]));
+  encdatavault->iv[1] = byte_swap_32 (hex_to_u32 (&iv_pos[8]));
 
   // ct
 
   const u8 *ct_pos = token.buf[4];
 
-  encdatavault->ct[0] = byte_swap_32 (hex_to_u32 ((const u8 *) &ct_pos[0]));
-  encdatavault->ct[1] = byte_swap_32 (hex_to_u32 ((const u8 *) &ct_pos[8]));
+  encdatavault->ct[0] = byte_swap_32 (hex_to_u32 (&ct_pos[0]));
+  encdatavault->ct[1] = byte_swap_32 (hex_to_u32 (&ct_pos[8]));
 
   // salt fixed
 
@@ -209,6 +209,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

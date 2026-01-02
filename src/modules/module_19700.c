@@ -9,6 +9,7 @@
 #include "bitops.h"
 #include "convert.h"
 #include "shared.h"
+#include "memory.h"
 
 static const u32   ATTACK_EXEC    = ATTACK_EXEC_OUTSIDE_KERNEL;
 static const u32   DGST_POS0      = 0;
@@ -67,6 +68,23 @@ typedef struct krb5tgs_18_tmp
 
 static const char *SIGNATURE_KRB5TGS = "$krb5tgs$18$";
 
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+{
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
+  {
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: failed to create 'm19700_comp' pipeline, timeout reached
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
   const u64 tmp_size = (const u64) sizeof (krb5tgs_18_tmp_t);
@@ -106,7 +124,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   // assume no signature found
   if (line_len < 12) return (PARSER_SALT_LENGTH);
 
-  char *spn_info_start  = strchr ((const char *) line_buf + 12 + 1, '*');
+  char *spn_info_start  = strchr (line_buf + 12 + 1, '*');
 
   int is_spn_provided = 0;
 
@@ -261,23 +279,25 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 {
   const krb5tgs_18_t *krb5tgs = (const krb5tgs_18_t *) esalt_buf;
 
-  char data[5120 * 4 * 2] = { 0 };
+  char *data = (char *) hcmalloc (5120 * 4 * 2);
 
   for (u32 i = 0, j = 0; i < krb5tgs->edata2_len; i += 1, j += 2)
   {
-    u8 *ptr_edata2 = (u8 *) krb5tgs->edata2;
+    const u8 *ptr_edata2 = (const u8 *) krb5tgs->edata2;
 
-    sprintf (data + j, "%02x", ptr_edata2[i]);
+    snprintf (data + j, 3, "%02x", ptr_edata2[i]);
   }
 
   const int line_len = snprintf (line_buf, line_size, "%s%s$%s$%08x%08x%08x$%s",
     SIGNATURE_KRB5TGS,
-    (char *) krb5tgs->user,
-    (char *) krb5tgs->domain,
+    (const char *) krb5tgs->user,
+    (const char *) krb5tgs->domain,
     krb5tgs->checksum[0],
     krb5tgs->checksum[1],
     krb5tgs->checksum[2],
     data);
+
+  hcfree (data);
 
   return line_len;
 }
@@ -293,6 +313,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -358,6 +380,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = module_tmp_size;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

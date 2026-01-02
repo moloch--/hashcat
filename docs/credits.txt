@@ -25,19 +25,22 @@ Gabriele "matrix" Gristina <matrix@hashcat.net> (@gm4tr1x)
 * Apple macOS port
 * Apple Silicon support
 * Universal binary on Apple Silicon
+* Add support to character class rules
 * Hardware monitor initial code base and maintenance
 * Test suite initial code base and maintenance
-* Makefile initial code base
+* Edge case testing suite
+* Makefile initial code base and maintenance
 * Multithreading initial code base
 * MultiGPU initial code base
 * Benchmarks initial code base
+* hashcat-toolchain docker
 
 Jean-Christophe "Fist0urs" Delaunay <jean-christophe.delaunay@synacktiv.com> (@Fist0urs)
 
 * Kerberos TGS Rep enctype 23 kernel module
 * Kerberos TGS Rep enctype 17/18 kernel module
 * AxCrypt kernel module
-* KeePass kernel module
+* KeePass (KDBX v2/v3) kernel module
 * DPAPImk v1 and v2 kernel module
 
 Jeremi "epixoip" Gosney <jgosney@terahash.com> (@jmgosney)
@@ -84,5 +87,13 @@ Brandon Chalk <brandon@casaba.com> (@brandoncasaba)
 
 Jamie Riden <jamie@blacktraffic.co.uk>
 * Web2py pbkdf2-sha512 plugin
+
+Dylan Evans <fin3ss3g0d@pm.me> (@fin3ss3g0d)
+* Apache Shiro 1 SHA-512 plugin
+
+Costin Enache <costin@detack.de>
+* RACF KDFAES module
+* IBM AS400 DES and SSHA1 modules
+* Cisco-ISE Hashed Password (SHA256) module
 
 !!! All the package maintainers of hashcat !!!

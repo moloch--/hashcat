@@ -11,7 +11,7 @@ use warnings;
 use Crypt::CBC;
 use Digest::MD5 qw (md5);
 
-sub module_constraints { [[0, 256], [16, 16], [-1, -1], [-1, -1], [-1, -1]] }
+sub module_constraints { [[0, 128], [16, 16], [-1, -1], [-1, -1], [-1, -1]] }
 
 sub generate_key
 {
@@ -56,7 +56,7 @@ sub module_generate_hash
 
     my $dec_bin = $aes->decrypt ($data_bin);
 
-    ## This is a ridiculous check of successfull decryption
+    ## This is a ridiculous check of successful decryption
     ## There are no useable asn1 parsers for perl available
     ## We have to rely on a combination of padding check and pattern matching
     ## The (minimum) 16 bit should be good enough for a unit test

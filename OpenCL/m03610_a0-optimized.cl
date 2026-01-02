@@ -28,7 +28,7 @@
 #define uint_to_hex_lower8(i) make_u32x (l_bin2asc[(i).s0], l_bin2asc[(i).s1], l_bin2asc[(i).s2], l_bin2asc[(i).s3], l_bin2asc[(i).s4], l_bin2asc[(i).s5], l_bin2asc[(i).s6], l_bin2asc[(i).s7], l_bin2asc[(i).s8], l_bin2asc[(i).s9], l_bin2asc[(i).sa], l_bin2asc[(i).sb], l_bin2asc[(i).sc], l_bin2asc[(i).sd], l_bin2asc[(i).se], l_bin2asc[(i).sf])
 #endif
 
-KERNEL_FQ void m03610_m04 (KERN_ATTR_RULES ())
+KERNEL_FQ KERNEL_FA void m03610_m04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -217,7 +217,7 @@ KERNEL_FQ void m03610_m04 (KERN_ATTR_RULES ())
           | uint_to_hex_lower8 ((d >>  8) & 255) << 16;
     w1[3] = uint_to_hex_lower8 ((d >> 16) & 255) <<  0
           | uint_to_hex_lower8 ((d >> 24) & 255) << 16;
-    
+
     w2[0] = 0x80;
     w2[1] = 0;
     w2[2] = 0;
@@ -226,7 +226,7 @@ KERNEL_FQ void m03610_m04 (KERN_ATTR_RULES ())
     w3[1] = 0;
     w3[2] = 32 * 8;
     w3[3] = 0;
-    
+
     a = MD5M_A;
     b = MD5M_B;
     c = MD5M_C;
@@ -408,15 +408,15 @@ KERNEL_FQ void m03610_m04 (KERN_ATTR_RULES ())
   }
 }
 
-KERNEL_FQ void m03610_m08 (KERN_ATTR_RULES ())
+KERNEL_FQ KERNEL_FA void m03610_m08 (KERN_ATTR_RULES ())
 {
 }
 
-KERNEL_FQ void m03610_m16 (KERN_ATTR_RULES ())
+KERNEL_FQ KERNEL_FA void m03610_m16 (KERN_ATTR_RULES ())
 {
 }
 
-KERNEL_FQ void m03610_s04 (KERN_ATTR_RULES ())
+KERNEL_FQ KERNEL_FA void m03610_s04 (KERN_ATTR_RULES ())
 {
   /**
    * modifier
@@ -617,7 +617,7 @@ KERNEL_FQ void m03610_s04 (KERN_ATTR_RULES ())
           | uint_to_hex_lower8 ((d >>  8) & 255) << 16;
     w1[3] = uint_to_hex_lower8 ((d >> 16) & 255) <<  0
           | uint_to_hex_lower8 ((d >> 24) & 255) << 16;
-    
+
     w2[0] = 0x80;
     w2[1] = 0;
     w2[2] = 0;
@@ -631,7 +631,7 @@ KERNEL_FQ void m03610_s04 (KERN_ATTR_RULES ())
     b = MD5M_B;
     c = MD5M_C;
     d = MD5M_D;
-      
+
     MD5_STEP (MD5_Fo, a, b, c, d, w0[0], MD5C00, MD5S00);
     MD5_STEP (MD5_Fo, d, a, b, c, w0[1], MD5C01, MD5S01);
     MD5_STEP (MD5_Fo, c, d, a, b, w0[2], MD5C02, MD5S02);
@@ -811,10 +811,10 @@ KERNEL_FQ void m03610_s04 (KERN_ATTR_RULES ())
   }
 }
 
-KERNEL_FQ void m03610_s08 (KERN_ATTR_RULES ())
+KERNEL_FQ KERNEL_FA void m03610_s08 (KERN_ATTR_RULES ())
 {
 }
 
-KERNEL_FQ void m03610_s16 (KERN_ATTR_RULES ())
+KERNEL_FQ KERNEL_FA void m03610_s16 (KERN_ATTR_RULES ())
 {
 }

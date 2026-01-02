@@ -20,6 +20,7 @@
 #include "autotune.h"
 #include "benchmark.h"
 #include "bitmap.h"
+#include "bridges.h"
 #include "combinator.h"
 #include "cpt.h"
 #include "debugfile.h"
@@ -43,6 +44,7 @@
 #include "restore.h"
 #include "selftest.h"
 #include "status.h"
+#include "generic.h"
 #include "straight.h"
 #include "tuningdb.h"
 #include "user_options.h"
@@ -131,6 +133,7 @@ static int inner2_loop (hashcat_ctx_t *hashcat_ctx)
   status_ctx->words_base = status_ctx->words_cnt / amplifier_cnt;
 
   EVENT (EVENT_CALCULATED_WORDS_BASE);
+  EVENT (EVENT_CALCULATED_WORDS_CNT);
 
   if (user_options->keyspace == true)
   {
@@ -292,6 +295,16 @@ static int inner2_loop (hashcat_ctx_t *hashcat_ctx)
   if (user_options->loopback == true)
   {
     loopback_write_open (hashcat_ctx);
+  }
+
+  /**
+   * Set time for --bypass-delay and start point for --bypass-threshold
+   */
+
+  if (user_options->bypass_delay_chgd == true)
+  {
+    time (&status_ctx->timer_bypass_start);
+    status_ctx->bypass_digests_done_new = hashcat_ctx->hashes->digests_done_new;
   }
 
   /**
@@ -504,7 +517,7 @@ static int inner1_loop (hashcat_ctx_t *hashcat_ctx)
 // outer_loop iterates through hash_modes (in benchmark mode)
 // also initializes stuff that depend on hash mode
 
-static int outer_loop (hashcat_ctx_t *hashcat_ctx)
+static int outer_loop (hashcat_ctx_t *hashcat_ctx, const int iteration)
 {
   hashconfig_t         *hashconfig          = hashcat_ctx->hashconfig;
   hashes_t             *hashes              = hashcat_ctx->hashes;
@@ -525,6 +538,8 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
   status_ctx->run_main_level3   = true;
   status_ctx->run_thread_level1 = true;
   status_ctx->run_thread_level2 = true;
+
+  if (iteration) backend_session_context_reset (hashcat_ctx);
 
   /**
    * setup variables and buffers depending on hash_mode
@@ -547,7 +562,7 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
 
   if (module_ctx->module_deprecated_notice != MODULE_DEFAULT)
   {
-    if (user_options->deprecated_check_disable == false)
+    if (user_options->deprecated_check == true)
     {
       if ((user_options->show == true) || (user_options->left == true))
       {
@@ -615,7 +630,7 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
    * potfile removes
    */
 
-  if (user_options->potfile_disable == false)
+  if (user_options->potfile == true)
   {
     EVENT (EVENT_POTFILE_REMOVE_PARSE_PRE);
 
@@ -728,6 +743,12 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
   if (hashes_init_selftest (hashcat_ctx) == -1) return -1;
 
   /**
+   * load hashes, post automatisation
+   */
+
+  if (hashes_init_stage5 (hashcat_ctx) == -1) return -1;
+
+  /**
    * load hashes, benchmark
    */
 
@@ -780,6 +801,12 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
   if (mask_ctx_init (hashcat_ctx) == -1) return -1;
 
   /**
+   * generic mode init
+   */
+
+  if (generic_ctx_init (hashcat_ctx) == -1) return -1;
+
+  /**
    * prevent the user from using --skip/--limit together with maskfile and/or multiple word lists
    */
 
@@ -787,7 +814,7 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
   {
     if ((mask_ctx->masks_cnt > 1) || (straight_ctx->dicts_cnt > 1))
     {
-      event_log_error (hashcat_ctx, "Use of --skip/--limit is not supported with --increment, mask files, or --stdout.");
+      event_log_error (hashcat_ctx, "Use of --skip/--limit is not supported with --increment, mask files, multiple dictionaries, or --stdout.");
 
       return -1;
     }
@@ -837,6 +864,21 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
   EVENT (EVENT_POTFILE_NUM_CRACKED);
 
   /**
+   * setup salts for bridges, needs to be after bridge init, but before session start
+   */
+
+  EVENT (EVENT_BRIDGES_SALT_PRE);
+
+  if (bridges_salt_prepare (hashcat_ctx) == false)
+  {
+    event_log_error (hashcat_ctx, "Bridge salt preparation for hash-mode '%u' failed.", user_options->hash_mode);
+
+    return -1;
+  }
+
+  EVENT (EVENT_BRIDGES_SALT_POST);
+
+  /**
    * inform the user
    */
 
@@ -858,6 +900,8 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
         brain_ctx_destroy       (hashcat_ctx);
         #endif
 
+        bridges_salt_destroy    (hashcat_ctx);
+        bridges_destroy         (hashcat_ctx);
         bitmap_ctx_destroy      (hashcat_ctx);
         combinator_ctx_destroy  (hashcat_ctx);
         cpt_ctx_destroy         (hashcat_ctx);
@@ -865,6 +909,7 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
         hashes_destroy          (hashcat_ctx);
         mask_ctx_destroy        (hashcat_ctx);
         status_progress_destroy (hashcat_ctx);
+        generic_ctx_destroy     (hashcat_ctx);
         straight_ctx_destroy    (hashcat_ctx);
         wl_data_destroy         (hashcat_ctx);
 
@@ -968,6 +1013,14 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
 
       inner_threads_cnt++;
     }
+
+    if (module_ctx->module_advice_notice != MODULE_DEFAULT && user_options->quiet == false)
+    {
+      char *t_module_advice_notice = (char *) module_ctx->module_advice_notice (hashconfig, hashcat_ctx->user_options, user_options_extra);
+      const u64 module_kern_type = module_ctx->module_kern_type (hashconfig, hashcat_ctx->user_options, user_options_extra);
+      event_log_advice(hashcat_ctx, "Module %" PRIu64 " advice notice: %s", module_kern_type, t_module_advice_notice);
+      event_log_advice (hashcat_ctx, NULL);
+    }
   }
 
   // main call
@@ -1034,6 +1087,8 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
   brain_ctx_destroy       (hashcat_ctx);
   #endif
 
+  bridges_salt_destroy    (hashcat_ctx);
+  bridges_destroy         (hashcat_ctx);
   bitmap_ctx_destroy      (hashcat_ctx);
   combinator_ctx_destroy  (hashcat_ctx);
   cpt_ctx_destroy         (hashcat_ctx);
@@ -1041,6 +1096,7 @@ static int outer_loop (hashcat_ctx_t *hashcat_ctx)
   hashes_destroy          (hashcat_ctx);
   mask_ctx_destroy        (hashcat_ctx);
   status_progress_destroy (hashcat_ctx);
+  generic_ctx_destroy     (hashcat_ctx);
   straight_ctx_destroy    (hashcat_ctx);
   wl_data_destroy         (hashcat_ctx);
 
@@ -1063,14 +1119,16 @@ int hashcat_init (hashcat_ctx_t *hashcat_ctx, void (*event) (const u32, struct h
     hashcat_ctx->event = event;
   }
 
-  hashcat_ctx->brain_ctx          = (brain_ctx_t *)           hcmalloc (sizeof (brain_ctx_t));
   hashcat_ctx->bitmap_ctx         = (bitmap_ctx_t *)          hcmalloc (sizeof (bitmap_ctx_t));
+  hashcat_ctx->brain_ctx          = (brain_ctx_t *)           hcmalloc (sizeof (brain_ctx_t));
+  hashcat_ctx->bridge_ctx         = (bridge_ctx_t *)          hcmalloc (sizeof (bridge_ctx_t));
   hashcat_ctx->combinator_ctx     = (combinator_ctx_t *)      hcmalloc (sizeof (combinator_ctx_t));
   hashcat_ctx->cpt_ctx            = (cpt_ctx_t *)             hcmalloc (sizeof (cpt_ctx_t));
   hashcat_ctx->debugfile_ctx      = (debugfile_ctx_t *)       hcmalloc (sizeof (debugfile_ctx_t));
   hashcat_ctx->dictstat_ctx       = (dictstat_ctx_t *)        hcmalloc (sizeof (dictstat_ctx_t));
   hashcat_ctx->event_ctx          = (event_ctx_t *)           hcmalloc (sizeof (event_ctx_t));
   hashcat_ctx->folder_config      = (folder_config_t *)       hcmalloc (sizeof (folder_config_t));
+  hashcat_ctx->generic_ctx        = (generic_ctx_t *)         hcmalloc (sizeof (generic_ctx_t));
   hashcat_ctx->hashcat_user       = (hashcat_user_t *)        hcmalloc (sizeof (hashcat_user_t));
   hashcat_ctx->hashconfig         = (hashconfig_t *)          hcmalloc (sizeof (hashconfig_t));
   hashcat_ctx->hashes             = (hashes_t *)              hcmalloc (sizeof (hashes_t));
@@ -1098,14 +1156,16 @@ int hashcat_init (hashcat_ctx_t *hashcat_ctx, void (*event) (const u32, struct h
 
 void hashcat_destroy (hashcat_ctx_t *hashcat_ctx)
 {
-  hcfree (hashcat_ctx->brain_ctx);
   hcfree (hashcat_ctx->bitmap_ctx);
+  hcfree (hashcat_ctx->brain_ctx);
+  hcfree (hashcat_ctx->bridge_ctx);
   hcfree (hashcat_ctx->combinator_ctx);
   hcfree (hashcat_ctx->cpt_ctx);
   hcfree (hashcat_ctx->debugfile_ctx);
   hcfree (hashcat_ctx->dictstat_ctx);
   hcfree (hashcat_ctx->event_ctx);
   hcfree (hashcat_ctx->folder_config);
+  hcfree (hashcat_ctx->generic_ctx);
   hcfree (hashcat_ctx->hashcat_user);
   hcfree (hashcat_ctx->hashconfig);
   hcfree (hashcat_ctx->hashes);
@@ -1231,7 +1291,7 @@ int hashcat_session_init (hashcat_ctx_t *hashcat_ctx, const char *install_folder
    * To help users a bit
    */
 
-  setup_environment_variables (hashcat_ctx->folder_config);
+  setup_environment_variables (hashcat_ctx->folder_config, hashcat_ctx->user_options);
 
   setup_umask ();
 
@@ -1292,16 +1352,39 @@ int hashcat_session_init (hashcat_ctx_t *hashcat_ctx, const char *install_folder
   if (user_options_check_files (hashcat_ctx) == -1) return -1;
 
   /**
+   * Load bridge a bit too early actually, but we need to know the unit count so we can automatically configure virtualization for the user
+   */
+
+  EVENT (EVENT_BRIDGES_INIT_PRE);
+
+  if (bridges_init (hashcat_ctx) == false)
+  {
+    event_log_error (hashcat_ctx, "Bridge initialization for hash-mode '%u' failed.", user_options->hash_mode);
+
+    return -1;
+  }
+
+  EVENT (EVENT_BRIDGES_INIT_POST);
+
+  /**
    * Init backend library loader
    */
 
+  EVENT (EVENT_BACKEND_RUNTIMES_INIT_PRE);
+
   if (backend_ctx_init (hashcat_ctx) == -1) return -1;
+
+  EVENT (EVENT_BACKEND_RUNTIMES_INIT_POST);
 
   /**
    * Init backend devices
    */
 
+  EVENT (EVENT_BACKEND_DEVICES_INIT_PRE);
+
   if (backend_ctx_devices_init (hashcat_ctx, comptime) == -1) return -1;
+
+  EVENT (EVENT_BACKEND_DEVICES_INIT_POST);
 
   /**
    * HM devices: init
@@ -1400,6 +1483,7 @@ bool autodetect_hashmode_test (hashcat_ctx_t *hashcat_ctx)
 
   hashinfo_t *hash_info = (hashinfo_t *) hcmalloc (sizeof (hashinfo_t));
 
+  hash_info->dynamicx = (dynamicx_t *) hcmalloc (sizeof (dynamicx_t));
   hash_info->user = (user_t *) hcmalloc (sizeof (user_t));
   hash_info->orighash = (char *) hcmalloc (256);
   hash_info->split = (split_t *) hcmalloc (sizeof (split_t));
@@ -1428,6 +1512,8 @@ bool autodetect_hashmode_test (hashcat_ctx_t *hashcat_ctx)
   if (hashlist_mode == HL_MODE_ARG)
   {
     char *input_buf = user_options_extra->hc_hash;
+
+    if (!input_buf) return false;
 
     size_t input_len = strlen (input_buf);
 
@@ -1760,19 +1846,24 @@ int hashcat_session_execute (hashcat_ctx_t *hashcat_ctx)
 
     if (user_options->hash_mode_chgd == true)
     {
-      rc_final = outer_loop (hashcat_ctx);
+      rc_final = outer_loop (hashcat_ctx, 0);
 
       if (rc_final == -1) myabort (hashcat_ctx);
     }
     else
     {
+      int iteration = 0;
+
       int hash_mode = 0;
 
       while ((hash_mode = benchmark_next (hashcat_ctx)) != -1)
       {
+        if ((u32) hash_mode < user_options->benchmark_min) continue;
+        if ((u32) hash_mode > user_options->benchmark_max) continue;
+
         user_options->hash_mode = hash_mode;
 
-        rc_final = outer_loop (hashcat_ctx);
+        rc_final = outer_loop (hashcat_ctx, iteration++);
 
         if (rc_final == -1) myabort (hashcat_ctx);
 
@@ -1788,7 +1879,7 @@ int hashcat_session_execute (hashcat_ctx_t *hashcat_ctx)
 
     if (user_options->speed_only == true) user_options->quiet = true;
 
-    rc_final = outer_loop (hashcat_ctx);
+    rc_final = outer_loop (hashcat_ctx, 0);
 
     if (rc_final == -1) myabort (hashcat_ctx);
 
@@ -2027,7 +2118,7 @@ int hashcat_get_status (hashcat_ctx_t *hashcat_ctx, hashcat_status_t *hashcat_st
     device_info->exec_msec_dev                  = status_get_exec_msec_dev                  (hashcat_ctx, device_id);
     device_info->speed_sec_dev                  = status_get_speed_sec_dev                  (hashcat_ctx, device_id);
     device_info->guess_candidates_dev           = status_get_guess_candidates_dev           (hashcat_ctx, device_id);
-    #if defined(__APPLE__)
+    #if defined (__APPLE__)
     device_info->hwmon_fan_dev                  = status_get_hwmon_fan_dev                  (hashcat_ctx);
     #endif
     device_info->hwmon_dev                      = status_get_hwmon_dev                      (hashcat_ctx, device_id);

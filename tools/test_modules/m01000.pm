@@ -9,7 +9,7 @@ use strict;
 use warnings;
 
 use Digest::MD4 qw (md4_hex);
-use Text::Iconv;
+use Encode;
 
 sub module_constraints { [[0, 256], [-1, -1], [0, 27], [-1, -1], [-1, -1]] }
 
@@ -17,9 +17,9 @@ sub module_generate_hash
 {
   my $word = shift;
 
-  my $converter = Text::Iconv->new('utf8', 'UTF-16LE');
+  my $utf16le = encode("UTF-16LE", decode("utf-8", $word));
 
-  my $digest = md4_hex ($converter->convert ($word));
+  my $digest = md4_hex ($utf16le);
 
   return $digest;
 }

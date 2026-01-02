@@ -17,7 +17,7 @@ static const u32   DGST_POS1      = 4;
 static const u32   DGST_POS2      = 2;
 static const u32   DGST_POS3      = 1;
 static const u32   DGST_SIZE      = DGST_SIZE_4_5;
-static const u32   HASH_CATEGORY  = HASH_CATEGORY_OS;
+static const u32   HASH_CATEGORY  = HASH_CATEGORY_RAW_HASH_SALTED;
 static const char *HASH_NAME      = "sha1($salt.sha1(utf16le($username).':'.utf16le($pass)))";
 static const u64   KERN_TYPE      = 29000;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
@@ -58,6 +58,23 @@ typedef struct sha1_double_salt
   int salt2_len;
 
 } sha1_double_salt_t;
+
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+{
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
+  {
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: failed to create 'm29000_sxx' pipeline, timeout reached
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
 
 u64 module_esalt_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
@@ -122,11 +139,11 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     digest[4] -= SHA1M_E;
   }
 
-  const bool parse_rc1 = generic_salt_decode (hashconfig, token.buf[1], token.len[1], (u8 *) sha1_double_salt->salt1_buf, (int *) &sha1_double_salt->salt1_len);
+  const bool parse_rc1 = generic_salt_decode (hashconfig, token.buf[1], token.len[1], (u8 *) sha1_double_salt->salt1_buf, &sha1_double_salt->salt1_len);
 
   if (parse_rc1 == false) return (PARSER_SALT_LENGTH);
 
-  const bool parse_rc2 = generic_salt_decode (hashconfig, token.buf[2], token.len[2], (u8 *) sha1_double_salt->salt2_buf, (int *) &sha1_double_salt->salt2_len);
+  const bool parse_rc2 = generic_salt_decode (hashconfig, token.buf[2], token.len[2], (u8 *) sha1_double_salt->salt2_buf, &sha1_double_salt->salt2_len);
 
   if (parse_rc2 == false) return (PARSER_SALT_LENGTH);
 
@@ -195,13 +212,13 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   out_len += 1;
 
-  out_len += generic_salt_encode (hashconfig, (const u8 *) sha1_double_salt->salt1_buf, (const int) sha1_double_salt->salt1_len, out_buf + out_len);
+  out_len += generic_salt_encode (hashconfig, (const u8 *) sha1_double_salt->salt1_buf, sha1_double_salt->salt1_len, out_buf + out_len);
 
   out_buf[out_len] = hashconfig->separator;
 
   out_len += 1;
 
-  out_len += generic_salt_encode (hashconfig, (const u8 *) sha1_double_salt->salt2_buf, (const int) sha1_double_salt->salt2_len, out_buf + out_len);
+  out_len += generic_salt_encode (hashconfig, (const u8 *) sha1_double_salt->salt2_buf, sha1_double_salt->salt2_len, out_buf + out_len);
 
   return out_len;
 }
@@ -217,6 +234,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -282,6 +301,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = MODULE_DEFAULT;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

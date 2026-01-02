@@ -10,7 +10,7 @@ use warnings;
 
 use Digest::SipHash qw (siphash);
 
-sub module_constraints { [[-1, -1], [-1, -1], [0, 55], [32, 32], [-1, -1]] }
+sub module_constraints { [[-1, -1], [-1, -1], [0, 55], [32, 32], [0, 55]] }
 
 sub module_generate_hash
 {

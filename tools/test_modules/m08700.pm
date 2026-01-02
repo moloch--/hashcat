@@ -8,7 +8,7 @@
 use strict;
 use warnings;
 
-sub module_constraints { [[-1, -1], [-1, -1], [0, 55], [5, 5], [-1, -1]] }
+sub module_constraints { [[-1, -1], [-1, -1], [0, 32], [5, 5], [0, 55]] }
 
 my $LOTUS_MAGIC_TABLE =
 [

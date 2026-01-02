@@ -21,10 +21,12 @@
 hc_dynlib_t  hc_dlopen  (LPCSTR lpLibFileName);
 BOOL         hc_dlclose (hc_dynlib_t hLibModule);
 hc_dynfunc_t hc_dlsym   (hc_dynlib_t hModule, LPCSTR lpProcName);
+char        *hc_dlerror ();
 #else
 hc_dynlib_t  hc_dlopen  (const char *filename);
 int          hc_dlclose (hc_dynlib_t handle);
 hc_dynfunc_t hc_dlsym   (hc_dynlib_t handle, const char *symbol);
+char        *hc_dlerror ();
 #endif
 
 #define HC_LOAD_FUNC2(ptr,name,type,var,libname,noerr) \

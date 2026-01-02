@@ -117,7 +117,7 @@ int sort_by_hash_no_salt (const void *v1, const void *v2, void *v3)
   return sort_by_digest_p0p1 (d1, d2, v3);
 }
 
-int hash_encode (const hashconfig_t *hashconfig, const hashes_t *hashes, const module_ctx_t *module_ctx, char *out_buf, const int out_size, const u32 salt_pos, const u32 digest_pos)
+int hash_encode (const user_options_t *user_options, const hashconfig_t *hashconfig, const hashes_t *hashes, const module_ctx_t *module_ctx, char *out_buf, const int out_size, const u32 salt_pos, const u32 digest_pos)
 {
   if (module_ctx->module_hash_encode == MODULE_DEFAULT)
   {
@@ -146,19 +146,28 @@ int hash_encode (const hashconfig_t *hashconfig, const hashes_t *hashes, const m
 
   if (hash_info) hash_info_ptr = hash_info[digest_cur];
 
-  const int out_len = module_ctx->module_hash_encode
-  (
-    hashconfig,
-    digests_buf_ptr,
-    salts_buf,
-    esalts_buf_ptr,
-    hook_salts_buf_ptr,
-    hash_info_ptr,
-    out_buf,
-    out_size
-  );
+  int line_len = 0;
 
-  return out_len;
+  if (user_options->hash_copy == true)
+  {
+    line_len = snprintf (out_buf, out_size, "%s", hash_info_ptr->orighash);
+  }
+  else
+  {
+    line_len = module_ctx->module_hash_encode
+    (
+      hashconfig,
+      digests_buf_ptr,
+      salts_buf,
+      esalts_buf_ptr,
+      hook_salts_buf_ptr,
+      hash_info_ptr,
+      out_buf,
+      out_size
+    );
+  }
+
+  return line_len;
 }
 
 int save_hash (hashcat_ctx_t *hashcat_ctx)
@@ -241,7 +250,18 @@ int save_hash (hashcat_ctx_t *hashcat_ctx)
           hc_fputc (separator, &fp);
         }
 
-        const int out_len = hash_encode (hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
+        if (user_options->dynamic_x == true)
+        {
+          dynamicx_t *dynamicx = hashes->hash_info[idx]->dynamicx;
+
+          u32 i;
+
+          for (i = 0; i < dynamicx->dynamicx_len; i++) hc_fputc (dynamicx->dynamicx_buf[i], &fp);
+
+          hc_fputc (separator, &fp);
+        }
+
+        const int out_len = hash_encode (hashcat_ctx->user_options, hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
 
         out_buf[out_len] = 0;
 
@@ -323,7 +343,7 @@ int check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pla
 
     if (device_param->is_cuda == true)
     {
-      rc = hc_cuMemcpyDtoHAsync (hashcat_ctx, tmps, device_param->cuda_d_tmps + (plain->gidvid * hashconfig->tmp_size), hashconfig->tmp_size, device_param->cuda_stream);
+      rc = hc_cuMemcpyDtoH (hashcat_ctx, tmps, device_param->cuda_d_tmps + (plain->gidvid * hashconfig->tmp_size), hashconfig->tmp_size);
 
       if (rc == 0)
       {
@@ -340,7 +360,7 @@ int check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pla
 
     if (device_param->is_hip == true)
     {
-      rc = hc_hipMemcpyDtoHAsync (hashcat_ctx, tmps, device_param->hip_d_tmps + (plain->gidvid * hashconfig->tmp_size), hashconfig->tmp_size, device_param->hip_stream);
+      rc = hc_hipMemcpyDtoH (hashcat_ctx, tmps, device_param->hip_d_tmps + (plain->gidvid * hashconfig->tmp_size), hashconfig->tmp_size);
 
       if (rc == 0)
       {
@@ -358,7 +378,7 @@ int check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pla
     #if defined (__APPLE__)
     if (device_param->is_metal == true)
     {
-      rc = hc_mtlMemcpyDtoH (hashcat_ctx, device_param->metal_command_queue, tmps, device_param->metal_d_tmps, plain->gidvid * hashconfig->tmp_size, hashconfig->tmp_size);
+      rc = hc_mtlMemcpyDtoH (hashcat_ctx, device_param->metal_device, device_param->metal_command_queue, tmps, device_param->metal_d_tmps, plain->gidvid * hashconfig->tmp_size, hashconfig->tmp_size);
 
       if (rc == -1)
       {
@@ -371,7 +391,7 @@ int check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pla
 
     if (device_param->is_opencl == true)
     {
-      rc = hc_clEnqueueReadBuffer (hashcat_ctx, device_param->opencl_command_queue, device_param->opencl_d_tmps, CL_FALSE, plain->gidvid * hashconfig->tmp_size, hashconfig->tmp_size, tmps, 0, NULL, &opencl_event);
+      rc = hc_clEnqueueReadBuffer (hashcat_ctx, device_param->opencl_command_queue, device_param->opencl_d_tmps, CL_TRUE, plain->gidvid * hashconfig->tmp_size, hashconfig->tmp_size, tmps, 0, NULL, &opencl_event);
 
       if (rc == 0)
       {
@@ -391,7 +411,7 @@ int check_hash (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param, pla
 
   u8 *out_buf = hashes->out_buf;
 
-  int out_len = hash_encode (hashconfig, hashes, module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
+  int out_len = hash_encode (hashcat_ctx->user_options, hashconfig, hashes, module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, salt_pos, digest_pos);
 
   out_buf[out_len] = 0;
 
@@ -576,14 +596,14 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
   if (device_param->is_cuda == true)
   {
-    if (hc_cuMemcpyDtoHAsync (hashcat_ctx, &num_cracked, device_param->cuda_d_result, sizeof (u32), device_param->cuda_stream) == -1) return -1;
+    if (hc_cuMemcpyDtoH (hashcat_ctx, &num_cracked, device_param->cuda_d_result, sizeof (u32)) == -1) return -1;
 
     if (hc_cuStreamSynchronize (hashcat_ctx, device_param->cuda_stream) == -1) return -1;
   }
 
   if (device_param->is_hip == true)
   {
-    if (hc_hipMemcpyDtoHAsync (hashcat_ctx, &num_cracked, device_param->hip_d_result, sizeof (u32), device_param->hip_stream) == -1) return -1;
+    if (hc_hipMemcpyDtoH (hashcat_ctx, &num_cracked, device_param->hip_d_result, sizeof (u32)) == -1) return -1;
 
     if (hc_hipStreamSynchronize (hashcat_ctx, device_param->hip_stream) == -1) return -1;
   }
@@ -591,7 +611,7 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
   #if defined (__APPLE__)
   if (device_param->is_metal == true)
   {
-    if (hc_mtlMemcpyDtoH (hashcat_ctx, device_param->metal_command_queue, &num_cracked, device_param->metal_d_result, 0, sizeof (u32)) == -1) return -1;
+    if (hc_mtlMemcpyDtoH (hashcat_ctx, device_param->metal_device, device_param->metal_command_queue, &num_cracked, device_param->metal_d_result, 0, sizeof (u32)) == -1) return -1;
   }
   #endif
 
@@ -613,7 +633,7 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
   if (device_param->is_cuda == true)
   {
-    rc = hc_cuMemcpyDtoHAsync (hashcat_ctx, cracked, device_param->cuda_d_plain_bufs, num_cracked * sizeof (plain_t), device_param->cuda_stream);
+    rc = hc_cuMemcpyDtoH (hashcat_ctx, cracked, device_param->cuda_d_plain_bufs, num_cracked * sizeof (plain_t));
 
     if (rc == 0)
     {
@@ -630,7 +650,7 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
 
   if (device_param->is_hip == true)
   {
-    rc = hc_hipMemcpyDtoHAsync (hashcat_ctx, cracked, device_param->hip_d_plain_bufs, num_cracked * sizeof (plain_t), device_param->hip_stream);
+    rc = hc_hipMemcpyDtoH (hashcat_ctx, cracked, device_param->hip_d_plain_bufs, num_cracked * sizeof (plain_t));
 
     if (rc == 0)
     {
@@ -648,7 +668,7 @@ int check_cracked (hashcat_ctx_t *hashcat_ctx, hc_device_param_t *device_param)
   #if defined (__APPLE__)
   if (device_param->is_metal == true)
   {
-    rc = hc_mtlMemcpyDtoH (hashcat_ctx, device_param->metal_command_queue, cracked, device_param->metal_d_plain_bufs, 0, num_cracked * sizeof (plain_t));
+    rc = hc_mtlMemcpyDtoH (hashcat_ctx, device_param->metal_device, device_param->metal_command_queue, cracked, device_param->metal_d_plain_bufs, 0, num_cracked * sizeof (plain_t));
 
     if (rc == -1)
     {
@@ -1003,7 +1023,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
   void   *esalts_buf     = NULL;
   void   *hook_salts_buf = NULL;
 
-  if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT))
+  if ((user_options->dynamic_x == true) || (user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT) || (user_options->hash_copy == true))
   {
     u64 hash_pos;
 
@@ -1013,12 +1033,17 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
 
       hashes_buf[hash_pos].hash_info = hash_info;
 
+      if (user_options->dynamic_x == true)
+      {
+        hash_info->dynamicx = (dynamicx_t *) hcmalloc (sizeof (dynamicx_t));
+      }
+
       if (user_options->username == true)
       {
         hash_info->user = (user_t *) hcmalloc (sizeof (user_t));
       }
 
-      if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY)
+      if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY || user_options->hash_copy == true)
       {
         if (user_options->benchmark == false)
         {
@@ -1117,7 +1142,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
 
     hashes_cnt = 1;
   }
-  else if (user_options->hash_info == true)
+  else if (user_options->hash_info > 0)
   {
   }
   else if (user_options->keyspace == true)
@@ -1153,7 +1178,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
       }
       else
       {
-        if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY)
+        if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY || user_options->hash_copy == true)
         {
           hashinfo_t *hash_info_tmp = hashes_buf[hashes_cnt].hash_info;
 
@@ -1242,7 +1267,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
                 }
                 else
                 {
-                  event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+                  event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
                 }
               }
 
@@ -1253,7 +1278,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
             }
             else
             {
-              event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+              event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
             }
 
             if (parser_status == PARSER_TOKEN_LENGTH)
@@ -1277,7 +1302,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
                 }
                 else
                 {
-                  event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+                  event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
                 }
               }
 
@@ -1288,7 +1313,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
             }
             else
             {
-              event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+              event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
             }
 
             if (parser_status == PARSER_TOKEN_LENGTH)
@@ -1314,7 +1339,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
                 }
                 else
                 {
-                  event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+                  event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
                 }
               }
 
@@ -1325,7 +1350,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
             }
             else
             {
-              event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+              event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
             }
 
             if (parser_status == PARSER_TOKEN_LENGTH)
@@ -1352,7 +1377,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
               }
               else
               {
-                event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+                event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
               }
             }
 
@@ -1360,7 +1385,8 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
           }
           else
           {
-            event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+            event_log_warning (hashcat_ctx, "Hash was parsed as a commandline argument (not as a file, maybe the file doesn't exist?)");
+            event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
           }
 
           if (parser_status == PARSER_TOKEN_LENGTH)
@@ -1463,7 +1489,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
           }
         }
 
-        if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY)
+        if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY || user_options->hash_copy == true)
         {
           hashinfo_t *hash_info_tmp = hashes_buf[hashes_cnt].hash_info;
 
@@ -1513,7 +1539,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
               }
               else
               {
-                event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
+                event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
               }
 
               hcfree (tmp_line_buf);
@@ -1539,7 +1565,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
                 }
                 else
                 {
-                  event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
+                  event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
                 }
 
                 hcfree (tmp_line_buf);
@@ -1571,7 +1597,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
               }
               else
               {
-                event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
+                event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
               }
 
               hcfree (tmp_line_buf);
@@ -1597,7 +1623,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
                 }
                 else
                 {
-                  event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
+                  event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
                 }
 
                 hcfree (tmp_line_buf);
@@ -1631,7 +1657,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
               }
               else
               {
-                event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
+                event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
               }
 
               hcfree (tmp_line_buf);
@@ -1657,7 +1683,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
                 }
                 else
                 {
-                  event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
+                  event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
                 }
 
                 hcfree (tmp_line_buf);
@@ -1692,7 +1718,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
             }
             else
             {
-              event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
+              event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status));
             }
 
             hcfree (tmp_line_buf);
@@ -1723,7 +1749,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
               }
               else
               {
-                event_log_warning (hashcat_ctx, "Hashfile '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
+                event_log_warning (hashcat_ctx, "Hash parsing error in hashfile: '%s' on line %u (%s): %s", hashes->hashfile, line_num, tmp_line_buf, strparser (parser_status_postprocess));
               }
 
               hcfree (tmp_line_buf);
@@ -1771,7 +1797,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
 
       size_t input_len = strlen (input_buf);
 
-      if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY)
+      if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY || user_options->hash_copy == true)
       {
         hashinfo_t *hash_info_tmp = hashes_buf[hashes_cnt].hash_info;
 
@@ -1832,7 +1858,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
             }
             else
             {
-              event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+              event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
             }
           }
 
@@ -1840,7 +1866,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
         }
         else
         {
-          event_log_warning (hashcat_ctx, "Hash '%s': %s", input_buf, strparser (parser_status));
+          event_log_warning (hashcat_ctx, "Hash parsing error: '%s': %s", input_buf, strparser (parser_status));
         }
 
         if (parser_status == PARSER_TOKEN_LENGTH)
@@ -1902,7 +1928,7 @@ int hashes_init_stage1 (hashcat_ctx_t *hashcat_ctx)
     event_log_advice (hashcat_ctx, "* Token length exception: %u/%u hashes", hashes->parser_token_length_cnt, hashes->parser_token_length_cnt + hashes->hashes_cnt);
     event_log_advice (hashcat_ctx, "  This error happens if the wrong hash type is specified, if the hashes are");
     event_log_advice (hashcat_ctx, "  malformed, or if input is otherwise not as expected (for example, if the");
-    event_log_advice (hashcat_ctx, "  --username option is used but no username is present)");
+    event_log_advice (hashcat_ctx, "  --username or --dynamic-x option is used but no username or dynamic-tag is present)");
     event_log_advice (hashcat_ctx, NULL);
   }
 
@@ -2004,7 +2030,7 @@ int hashes_init_stage2 (hashcat_ctx_t *hashcat_ctx)
 
   hashinfo_t **hash_info = NULL;
 
-  if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT))
+  if ((user_options->username == true) || (user_options->dynamic_x == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT) || (user_options->hash_copy == true))
   {
     hash_info = (hashinfo_t **) hccalloc (hashes_cnt, sizeof (hashinfo_t *));
   }
@@ -2055,7 +2081,7 @@ int hashes_init_stage2 (hashcat_ctx_t *hashcat_ctx)
     hashes_buf[0].esalt = esalts_buf_new_ptr;
   }
 
-  if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT))
+  if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT) || (user_options->hash_copy == true))
   {
     hash_info[0] = hashes_buf[0].hash_info;
   }
@@ -2117,7 +2143,7 @@ int hashes_init_stage2 (hashcat_ctx_t *hashcat_ctx)
       hashes_buf[hashes_pos].esalt = esalts_buf_new_ptr;
     }
 
-    if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT))
+    if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (hashconfig->opts_type & OPTS_TYPE_HASH_SPLIT) | (user_options->hash_copy == true))
     {
       hash_info[hashes_pos] = hashes_buf[hashes_pos].hash_info;
     }
@@ -2211,7 +2237,6 @@ int hashes_init_stage3 (hashcat_ctx_t *hashcat_ctx)
   hashes->digests_done_zero = digests_done_zero;
   hashes->digests_done_pot  = digests_done_pot;
 
-  hashes->salts_cnt         = salts_cnt;
   hashes->salts_done        = salts_done;
 
   return 0;
@@ -2221,9 +2246,7 @@ int hashes_init_stage4 (hashcat_ctx_t *hashcat_ctx)
 {
   hashconfig_t         *hashconfig         = hashcat_ctx->hashconfig;
   hashes_t             *hashes             = hashcat_ctx->hashes;
-  module_ctx_t         *module_ctx         = hashcat_ctx->module_ctx;
   user_options_t       *user_options       = hashcat_ctx->user_options;
-  user_options_extra_t *user_options_extra = hashcat_ctx->user_options_extra;
 
   if (hashes->salts_cnt == 1)
     hashconfig->opti_type |= OPTI_TYPE_SINGLE_SALT;
@@ -2268,13 +2291,19 @@ int hashes_init_stage4 (hashcat_ctx_t *hashcat_ctx)
 
   if ((hashconfig->opts_type & OPTS_TYPE_DEEP_COMP_KERNEL) == 0)
   {
-    if (hashconfig->attack_exec == ATTACK_EXEC_OUTSIDE_KERNEL)
+    if ((hashconfig->opts_type & OPTS_TYPE_MULTIHASH_DESPITE_ESALT) == 0)
     {
-      if (hashes->digests_cnt != hashes->salts_cnt)
+      if (hashconfig->attack_exec == ATTACK_EXEC_OUTSIDE_KERNEL)
       {
-        event_log_error (hashcat_ctx, "This hash-mode plugin cannot crack multiple hashes with the same salt, please select one of the hashes.");
+        if (hashconfig->esalt_size > 0)
+        {
+          if (hashes->digests_cnt != hashes->salts_cnt)
+          {
+            event_log_error (hashcat_ctx, "This hash-mode plugin cannot crack multiple hashes with the same salt, please select one of the hashes.");
 
-        return -1;
+            return -1;
+          }
+        }
       }
     }
   }
@@ -2294,22 +2323,6 @@ int hashes_init_stage4 (hashcat_ctx_t *hashcat_ctx)
         return -1;
       }
     }
-  }
-
-  // time to update extra_tmp_size which is tmp_size value based on hash configuration
-
-  if (module_ctx->module_extra_tmp_size != MODULE_DEFAULT)
-  {
-    const u64 extra_tmp_size = module_ctx->module_extra_tmp_size (hashconfig, user_options, user_options_extra, hashes);
-
-    if (extra_tmp_size == (u64) -1)
-    {
-      event_log_error (hashcat_ctx, "Mixed hash settings are not supported.");
-
-      return -1;
-    }
-
-    hashconfig->tmp_size = extra_tmp_size;
   }
 
   // at this point we no longer need hash_t* structure
@@ -2343,6 +2356,96 @@ int hashes_init_stage4 (hashcat_ctx_t *hashcat_ctx)
     user_options->brain_session = brain_session;
   }
   #endif
+
+  return 0;
+}
+
+int hashes_init_stage5 (hashcat_ctx_t *hashcat_ctx)
+{
+  hashconfig_t         *hashconfig         = hashcat_ctx->hashconfig;
+  hashes_t             *hashes             = hashcat_ctx->hashes;
+  module_ctx_t         *module_ctx         = hashcat_ctx->module_ctx;
+  user_options_t       *user_options       = hashcat_ctx->user_options;
+  user_options_extra_t *user_options_extra = hashcat_ctx->user_options_extra;
+
+  // time to update extra_tmp_size which is tmp_size value based on hash configuration
+
+  if (module_ctx->module_extra_tmp_size != MODULE_DEFAULT)
+  {
+    const u64 extra_tmp_size = module_ctx->module_extra_tmp_size (hashconfig, user_options, user_options_extra, hashes);
+
+    if ((extra_tmp_size & (1ULL << 62)) || (extra_tmp_size & (1ULL << 63)))
+    {
+      const u64 salt_pos = extra_tmp_size & 0xffffffff;
+
+      char *tmp_buf = (char *) hcmalloc (HCBUFSIZ_LARGE);
+
+      const int tmp_len = hash_encode (hashcat_ctx->user_options, hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, tmp_buf, HCBUFSIZ_LARGE, salt_pos, 0);
+
+      tmp_buf[tmp_len] = 0;
+
+      compress_terminal_line_length (tmp_buf, 47, 6);
+
+      char *user_hash = strdup (tmp_buf);
+
+      if (extra_tmp_size & (1ULL << 62))
+      {
+        strncpy (tmp_buf, hashconfig->st_hash, HCBUFSIZ_LARGE - 1);
+
+        compress_terminal_line_length (tmp_buf, 47, 6);
+
+        char *st_hash = strdup (tmp_buf);
+
+        event_log_error (hashcat_ctx, "ERROR: Incompatible self-test configuration detected.");
+
+        event_log_warning (hashcat_ctx, "The specified target hash:");
+        event_log_warning (hashcat_ctx, "  -> %s", user_hash);
+        event_log_warning (hashcat_ctx, "does not match the configuration of the self-test hash:");
+        event_log_warning (hashcat_ctx, "  -> %s", st_hash);
+        event_log_warning (hashcat_ctx, "The JIT-compiled kernel for this configuration may be incompatible.");
+        event_log_warning (hashcat_ctx, "You must disable the self-test functionality or recompile the plugin with a matching self-test hash.");
+        event_log_warning (hashcat_ctx, "To disable the self-test, use the --self-test-disable option.");
+        event_log_warning (hashcat_ctx, NULL);
+
+        hcfree (tmp_buf);
+        hcfree (user_hash);
+        hcfree (st_hash);
+
+        return -1;
+      }
+
+      if (extra_tmp_size & (1ULL << 63))
+      {
+        const int tmp_len = hash_encode (hashcat_ctx->user_options, hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, tmp_buf, HCBUFSIZ_LARGE, 0, 0);
+
+        tmp_buf[tmp_len] = 0;
+
+        compress_terminal_line_length (tmp_buf, 47, 6);
+
+        char *user_hash2 = strdup (tmp_buf);
+
+        event_log_error (hashcat_ctx, "ERROR: Mixed configuration detected.");
+
+        event_log_warning (hashcat_ctx, "The specified target hash:");
+        event_log_warning (hashcat_ctx, "  -> %s", user_hash);
+        event_log_warning (hashcat_ctx, "does not match the configuration of another target hash:");
+        event_log_warning (hashcat_ctx, "  -> %s", user_hash2);
+        event_log_warning (hashcat_ctx, "Please run these hashes in separate cracking sessions.");
+        event_log_warning (hashcat_ctx, NULL);
+
+        hcfree (tmp_buf);
+        hcfree (user_hash);
+        hcfree (user_hash2);
+
+        return -1;
+      }
+
+      hcfree (tmp_buf);
+      hcfree (user_hash);
+    }
+
+    hashconfig->tmp_size = extra_tmp_size;
+  }
 
   return 0;
 }
@@ -2545,7 +2648,7 @@ int hashes_init_zerohash (hashcat_ctx_t *hashcat_ctx)
   hash_t *hashes_buf = hashes->hashes_buf;
   u32     hashes_cnt = hashes->hashes_cnt;
 
-  // no solution for these special hash types (for instane because they use hashfile in output etc)
+  // no solution for these special hash types (for instance because they use hashfile in output etc)
 
   hash_t hash_buf;
 
@@ -2600,7 +2703,7 @@ int hashes_init_zerohash (hashcat_ctx_t *hashcat_ctx)
 
         u8 *out_buf = (u8 *) hcmalloc (HCBUFSIZ_LARGE);
 
-        int out_len = hash_encode (hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, 0, digest_pos);
+        int out_len = hash_encode (hashcat_ctx->user_options, hashcat_ctx->hashconfig, hashcat_ctx->hashes, hashcat_ctx->module_ctx, (char *) out_buf, HCBUFSIZ_LARGE, 0, digest_pos);
 
         out_buf[out_len] = 0;
 
@@ -2660,7 +2763,7 @@ void hashes_destroy (hashcat_ctx_t *hashcat_ctx)
   hcfree (hashes->salts_buf);
   hcfree (hashes->salts_shown);
 
-  if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY))
+  if ((user_options->username == true) || (hashconfig->opts_type & OPTS_TYPE_HASH_COPY) || (user_options->hash_copy == true))
   {
     for (u32 hash_pos = 0; hash_pos < hashes->hashes_cnt; hash_pos++)
     {
@@ -2669,7 +2772,7 @@ void hashes_destroy (hashcat_ctx_t *hashcat_ctx)
         hcfree (hashes->hash_info[hash_pos]->user);
       }
 
-      if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY)
+      if (hashconfig->opts_type & OPTS_TYPE_HASH_COPY || (user_options->hash_copy == true))
       {
         hcfree (hashes->hash_info[hash_pos]->orighash);
       }

@@ -53,18 +53,21 @@ typedef struct devise_hash
 
 } devise_hash_t;
 
-char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const hc_device_param_t *device_param)
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
-  char *jit_build_options = NULL;
-
-  if (device_param->opencl_device_vendor_id == VENDOR_ID_AMD_USE_HIP)
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
   {
-    // this is a workaround to avoid a compile time of over an hour (and then to not work) on ROCM in pure kernel mode
-
-    hc_asprintf (&jit_build_options, "-D NO_INLINE");
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: failed to create 'm19500_sxx' pipeline, timeout reached
+        return true;
+      }
+    }
   }
 
-  return jit_build_options;
+  return false;
 }
 
 u64 module_esalt_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
@@ -132,11 +135,11 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   digest[3] = byte_swap_32 (digest[3]);
   digest[4] = byte_swap_32 (digest[4]);
 
-  const bool parse_rc1 = generic_salt_decode (hashconfig, token.buf[1], token.len[1], (u8 *) devise_double_salt->salt_buf, (int *) &devise_double_salt->salt_len);
+  const bool parse_rc1 = generic_salt_decode (hashconfig, token.buf[1], token.len[1], (u8 *) devise_double_salt->salt_buf, &devise_double_salt->salt_len);
 
   if (parse_rc1 == false) return (PARSER_SALT_LENGTH);
 
-  const bool parse_rc2 = generic_salt_decode (hashconfig, token.buf[2], token.len[2], (u8 *) devise_double_salt->site_key_buf, (int *) &devise_double_salt->site_key_len);
+  const bool parse_rc2 = generic_salt_decode (hashconfig, token.buf[2], token.len[2], (u8 *) devise_double_salt->site_key_buf, &devise_double_salt->site_key_len);
 
   if (parse_rc2 == false) return (PARSER_SALT_LENGTH);
 
@@ -196,13 +199,13 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   out_len += 1;
 
-  out_len += generic_salt_encode (hashconfig, (const u8 *) devise_double_salt->salt_buf, (const int) devise_double_salt->salt_len, out_buf + out_len);
+  out_len += generic_salt_encode (hashconfig, (const u8 *) devise_double_salt->salt_buf, devise_double_salt->salt_len, out_buf + out_len);
 
   out_buf[out_len] = hashconfig->separator;
 
   out_len += 1;
 
-  out_len += generic_salt_encode (hashconfig, (const u8 *) devise_double_salt->site_key_buf, (const int) devise_double_salt->site_key_len, out_buf + out_len);
+  out_len += generic_salt_encode (hashconfig, (const u8 *) devise_double_salt->site_key_buf, devise_double_salt->site_key_len, out_buf + out_len);
 
   return out_len;
 }
@@ -218,6 +221,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -256,7 +261,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_hook23                   = MODULE_DEFAULT;
   module_ctx->module_hook_salt_size           = MODULE_DEFAULT;
   module_ctx->module_hook_size                = MODULE_DEFAULT;
-  module_ctx->module_jit_build_options        = module_jit_build_options;
+  module_ctx->module_jit_build_options        = MODULE_DEFAULT;
   module_ctx->module_jit_cache_disable        = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_max         = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_min         = MODULE_DEFAULT;
@@ -283,6 +288,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = MODULE_DEFAULT;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

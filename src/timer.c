@@ -33,7 +33,7 @@ double hc_timer_get (hc_timer_t a)
 
 void hc_timer_set (hc_timer_t* a)
 {
-  #if defined(__APPLE__) && defined(MISSING_CLOCK_GETTIME)
+  #if defined (__APPLE__) && defined (MISSING_CLOCK_GETTIME)
   gettimeofday (a, NULL);
   #else
   clock_gettime (CLOCK_MONOTONIC, a);
@@ -46,7 +46,7 @@ double hc_timer_get (hc_timer_t a)
 
   hc_timer_set (&hr_tmp);
 
-  #if defined(__APPLE__) && defined(MISSING_CLOCK_GETTIME)
+  #if defined (__APPLE__) && defined (MISSING_CLOCK_GETTIME)
   return (double) (((hr_tmp.tv_sec - (a).tv_sec) * 1000) + ((double) (hr_tmp.tv_usec - (a).tv_usec) / 1000));
   #else
   hc_timer_t s;

@@ -25,13 +25,13 @@ A clear and concise description of what you expected to happen.
 **Hardware/Compute device (please complete the following information):**
 - Compute device name: [e.g. RTX2080Ti]
 - OpenCL/CUDA driver name: [e.g. NVIDIA DRIVER]
-- OpenCL/CUDA driver version: [e.g. 465.21]
+- OpenCL/CUDA driver version: [e.g. 580.10]
 - OpenCL/CUDA driver source: [e.g. runtime installer/.exe installer]
 
 **Hashcat version (please complete the following information):**
  - OS: [e.g. Linux]
- - Distribution: [e.g. Ubuntu 18.04]
- - Version: [e.g. 6.2.0]
+ - Distribution: [e.g. Ubuntu 24.04]
+ - Version: [e.g. 7.1.2]
 
 **Diagnostic output compute devices:**
 

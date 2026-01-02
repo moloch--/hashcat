@@ -228,7 +228,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   phpass_encode (digest_buf, tmp);
 
-  return snprintf (line_buf, line_size, "%s%s%s", (char *) salt->salt_sign, (char *) salt->salt_buf, tmp);
+  return snprintf (line_buf, line_size, "%s%s%s", (const char *) salt->salt_sign, (const char *) salt->salt_buf, tmp);
 }
 
 void module_init (module_ctx_t *module_ctx)
@@ -242,6 +242,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

@@ -23,7 +23,8 @@ static const u32   HASH_CATEGORY  = HASH_CATEGORY_FDE;
 static const char *HASH_NAME      = "VeraCrypt SHA256 + XTS 512 bit + boot-mode (legacy)";
 static const u64   KERN_TYPE      = 13751;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
-                                  | OPTI_TYPE_SLOW_HASH_SIMD_LOOP;
+                                  | OPTI_TYPE_SLOW_HASH_SIMD_LOOP
+                                  | OPTI_TYPE_REGISTER_LIMIT;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_PT_GENERATE_LE
                                   | OPTS_TYPE_BINARY_HASHFILE
@@ -33,7 +34,7 @@ static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_COPY_TMPS;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "hashcat";
-static const char *ST_HASH        = "c8a5f07efc320ecd797ac2c5b911b0f7ee688f859890dd3fa39b4808eb3113219e2bf1517f46a20feba286a3f3e997c80361132262bc0dacb6e9f7088bec9f5689a0b989ad9d4cc847170422ecd3384c9ee5ccf813fa8fe8ba4d2e6a993c99032337032b83471e9e0aa2531d85481c6d66f3a0d24688e1a17b5e81b3f68736ed05279ac05bcb83bea0c813d807e8c5547f11774c93a0e9de280c1ac5b5f170c0a4b5234f7d0d35a8ec7ec69454607cd35be24428a7be1799beed0ccd6a2af49b920446ebb0cb0bebda4a86c386fcffbb61cb93894ad74819a288c6e5b2e12111011e9f149d165b91f79897f71a96bc17c2b7a5e184147a90e9289d143b597ea98797c560e91b454461d03182f1a6c0bfd2b332829f30f0f18c8253d3194aac7996d4c401a3c1de7b266962a7dd8bc0b071a357121f00bafda835584a119f8fa23306545c413856ad3b2784b8de8ce9377f180baeb0f41590eb603110ff0a82f67349711d6f1b5d707f9c655318af88530962b9127fcf3c73b4d26319a9760cd795cd5ecba203dade9e1c79af14a9e06b9b56ce0af024e6ac582bd3ced1051fb865b55b4b6eaa65789a0c31c04cc4f2fc7b458fda188907f16810f4ce6e12a264cdcb264f1c26533758b92f585a3bbc2cac84731d74e9603d1c43b321ca36b01e5724e0e5558bcba56b57c8d59ded93c12d2664350cf6a048bcfc5d62aa85c590";
+static const char *ST_HASH        = "c8a5f07efc320ecd797ac2c5b911b0f7ee688f859890dd3fa39b4808eb3113219e2bf1517f46a20feba286a3f3e997c80361132262bc0dacb6e9f7088bec9f5689a0b989ad9d4cc847170422ecd3384c9ee5ccf813fa8fe8ba4d2e6a993c99032337032b83471e9e0aa2531d85481c6d66f3a0d24688e1a17b5e81b3f68736ed05279ac05bcb83bea0c813d807e8c5547f11774c93a0e9de280c1ac5b5f170c0a4b5234f7d0d35a8ec7ec69454607cd35be24428a7be1799beed0ccd6a2af49b920446ebb0cb0bebda4a86c386fcffbb61cb93894ad74819a288c6e5b2e12111011e9f149d165b91f79897f71a96bc17c2b7a5e184147a90e9289d143b597ea98797c560e91b454461d03182f1a6c0bfd2b332829f30f0f18c8253d3194aac7996d4c401a3c1de7b266962a7dd8bc0b071a357121f00bafda835584a119f8fa23306545c413856ad3b2784b8de8ce9377f180baeb0f41590eb603110ff0a82f67349711d6f1b5d707f9c655318af88530962b9127fcf3c73b4d26319a9760cd795cd5ecba203dade9e1c79af14a9e06b9b56ce0af024e6ac582bd3ced1051fb865b55b4b6eaa65789a0c31c04cc4f2fc7b458fda188907f16810f4ce6e12a264cdcb264f1c26533758b92f585a3bbc2cac84731d74e9603d1c43b321ca36b01e5724e0e5558bcba56b57c8d59ded93c12d2664350cf6a048bcfc5d62aa85c590"; //PIM: 500
 
 u32         module_attack_exec    (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ATTACK_EXEC;     }
 u32         module_dgst_pos0      (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return DGST_POS0;       }
@@ -50,9 +51,15 @@ u32         module_salt_type      (MAYBE_UNUSED const hashconfig_t *hashconfig, 
 const char *module_st_hash        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_HASH;         }
 const char *module_st_pass        (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra) { return ST_PASS;         }
 
-#define VC_SALT_LEN   64
-#define VC_DATA_LEN   448
-#define VC_HEADER_LEN 512
+const char *module_usage_notice (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
+{
+  return "PIM for example hash is 500";
+}
+
+#define VC_SALT_LEN       (               64)
+#define VC_DATA_LEN       (              448)
+#define VC_HEADER_LEN     (              512)
+#define VC_HEADER_HEX_LEN (VC_HEADER_LEN * 2)
 
 typedef struct vc_tmp
 {
@@ -70,7 +77,7 @@ typedef struct vc_tmp
 
 typedef struct vc
 {
-  u32 data_buf[112];
+  u32 data_buf[VC_DATA_LEN / 4];
   u32 keyfile_buf16[16];
   u32 keyfile_buf32[32];
   u32 keyfile_enabled;
@@ -88,23 +95,21 @@ typedef struct vc
 static const int   ROUNDS_VERACRYPT_200000     = 200000;
 static const float MIN_SUFFICIENT_ENTROPY_FILE = 7.0f;
 
-char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const hc_device_param_t *device_param)
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
-  char *jit_build_options = NULL;
-
-  // Extra treatment for Apple systems
-  if (device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE)
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
   {
-    return jit_build_options;
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: failed to create 'm13751_init' pipeline, timeout reached
+        return true;
+      }
+    }
   }
 
-  // NVIDIA GPU
-  if (device_param->opencl_device_vendor_id == VENDOR_ID_NV)
-  {
-    hc_asprintf (&jit_build_options, "-D _unroll");
-  }
-
-  return jit_build_options;
+  return false;
 }
 
 int module_build_plain_postprocess (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const void *tmps, const u32 *src_buf, MAYBE_UNUSED const size_t src_sz, MAYBE_UNUSED const int src_len, u32 *dst_buf, MAYBE_UNUSED const size_t dst_sz)
@@ -169,20 +174,11 @@ u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED con
 
 int module_hash_init_selftest (MAYBE_UNUSED const hashconfig_t *hashconfig, hash_t *hash)
 {
-  const size_t st_hash_len = strlen (hashconfig->st_hash);
+  char header[VC_HEADER_LEN + 1] = { 0 };
 
-  char *tmpdata = (char *) hcmalloc (st_hash_len / 2);
+  hex_decode ((const u8 *) hashconfig->st_hash, VC_HEADER_HEX_LEN, (u8 *) header);
 
-  for (size_t i = 0, j = 0; j < st_hash_len; i += 1, j += 2)
-  {
-    const u8 c = hex_to_u8 ((const u8 *) hashconfig->st_hash + j);
-
-    tmpdata[i] = c;
-  }
-
-  const int parser_status = module_hash_decode (hashconfig, hash->digest, hash->salt, hash->esalt, hash->hook_salt, hash->hash_info, tmpdata, st_hash_len / 2);
-
-  hcfree (tmpdata);
+  const int parser_status = module_hash_decode (hashconfig, hash->digest, hash->salt, hash->esalt, hash->hook_salt, hash->hash_info, header, VC_HEADER_LEN);
 
   return parser_status;
 }
@@ -304,7 +300,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   // fake digest
 
-  memcpy (digest, vc->data_buf, 112);
+  memcpy (digest, vc->data_buf, VC_DATA_LEN / 4);
 
   return (PARSER_OK);
 }
@@ -320,9 +316,12 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = module_build_plain_postprocess;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
+  module_ctx->module_usage_notice             = module_usage_notice;
   module_ctx->module_dgst_pos0                = module_dgst_pos0;
   module_ctx->module_dgst_pos1                = module_dgst_pos1;
   module_ctx->module_dgst_pos2                = module_dgst_pos2;
@@ -358,7 +357,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_hook23                   = MODULE_DEFAULT;
   module_ctx->module_hook_salt_size           = MODULE_DEFAULT;
   module_ctx->module_hook_size                = MODULE_DEFAULT;
-  module_ctx->module_jit_build_options        = module_jit_build_options;
+  module_ctx->module_jit_build_options        = MODULE_DEFAULT;
   module_ctx->module_jit_cache_disable        = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_max         = MODULE_DEFAULT;
   module_ctx->module_kernel_accel_min         = MODULE_DEFAULT;
@@ -385,6 +384,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = module_tmp_size;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

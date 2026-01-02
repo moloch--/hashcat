@@ -1,0 +1,1 @@
+Used [`keepass2john`](https://github.com/openwall/john/blob/53674043c9cf4ece82a649e4f5834fd52f602935/src/keepass2john.c) to generate the .keepass2john files. Only difference with the .hash files is that those don't contain the file name such that 34300 can crack them.

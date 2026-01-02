@@ -20,12 +20,12 @@ void sort_r(void *base, size_t nel, size_t width,
             int (*compar)(const void *_a, const void *_b, void *_arg),
             void *arg);
 
-Slightly modified to work with hashcat to no falsly detect _SORT_R_LINUX with mingw
+Slightly modified to work with hashcat to no falsely detect _SORT_R_LINUX with mingw
 
 */
 
 #if (defined __APPLE__ || defined __MACH__ || defined __DARWIN__ || \
-     defined __FreeBSD__ || defined __DragonFly__ || defined __NetBSD__)
+     defined __OpenBSD__ || defined __FreeBSD__ || defined __DragonFly__ || defined __NetBSD__)
 #  define _SORT_R_BSD
 #  define _SORT_R_INLINE inline
 #elif (defined __linux__) || defined (__CYGWIN__)
@@ -138,7 +138,7 @@ static _SORT_R_INLINE void sort_r_simple(void *base, size_t nel, size_t w,
 
   /* Declare structs and functions */
 
-  #if defined _SORT_R_BSD
+  #if defined _SORT_R_BSD && !defined(qsort_r)
 
     /* Ensure qsort_r is defined */
     extern void qsort_r(void *base, size_t nel, size_t width, void *thunk,
@@ -199,13 +199,13 @@ static _SORT_R_INLINE void sort_r_simple(void *base, size_t nel, size_t w,
 
     #elif defined _SORT_R_BSD
 
-      struct sort_r_data tmp;
-      tmp.arg = arg;
-      tmp.compar = compar;
-
       #if defined __NetBSD__
         sort_r_simple(base, nel, width, compar, arg);
       #else
+        struct sort_r_data tmp;
+        tmp.arg = arg;
+        tmp.compar = compar;
+
         qsort_r(base, nel, width, &tmp, sort_r_arg_swap);
       #endif
 

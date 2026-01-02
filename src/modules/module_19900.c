@@ -213,15 +213,15 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   for (u32 i = 0, j = 0; i < krb5pa->enc_timestamp_len; i += 1, j += 2)
   {
-    u8 *ptr_enc_timestamp = (u8 *) krb5pa->enc_timestamp;
+    const u8 *ptr_enc_timestamp = (const u8 *) krb5pa->enc_timestamp;
 
-    sprintf (data + j, "%02x", ptr_enc_timestamp[i]);
+    snprintf (data + j, 3, "%02x", ptr_enc_timestamp[i]);
   }
 
   const int line_len = snprintf (line_buf, line_size, "%s%s$%s$%s%08x%08x%08x",
     SIGNATURE_KRB5PA,
-    (char *) krb5pa->user,
-    (char *) krb5pa->domain,
+    (const char *) krb5pa->user,
+    (const char *) krb5pa->domain,
     data,
     krb5pa->checksum[0],
     krb5pa->checksum[1],
@@ -241,6 +241,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

@@ -23,8 +23,7 @@ static const char *HASH_NAME      = "QNX /etc/shadow (MD5)";
 static const u64   KERN_TYPE      = 19000;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
-                                  | OPTS_TYPE_PT_GENERATE_LE
-                                  | OPTS_TYPE_MAXIMUM_THREADS;
+                                  | OPTS_TYPE_PT_GENERATE_LE;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "hashcat";
 static const char *ST_HASH        = "@m@75f6f129f9c9e77b6b1b78f791ed764a@8741857532330050";
@@ -51,13 +50,6 @@ typedef struct qnx_md5_tmp
 } qnx_md5_tmp_t;
 
 static const int ROUNDS_QNX = 1000;
-
-u32 module_kernel_threads_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  const u32 kernel_threads_max = 64;
-
-  return kernel_threads_max;
-}
 
 u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
@@ -115,7 +107,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     iter = hc_strtoul ((const char *) token.buf[1] + 2, NULL, 10);
   }
 
-  // iter++; the additinal round is added in the init kernel
+  // iter++; the additional round is added in the init kernel
 
   salt->salt_iter = iter;
 
@@ -123,10 +115,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   if (token.len[2] != 32) return (PARSER_HASH_LENGTH);
 
-  digest[0] = hex_to_u32 ((const u8 *) token.buf[2] +  0);
-  digest[1] = hex_to_u32 ((const u8 *) token.buf[2] +  8);
-  digest[2] = hex_to_u32 ((const u8 *) token.buf[2] + 16);
-  digest[3] = hex_to_u32 ((const u8 *) token.buf[2] + 24);
+  digest[0] = hex_to_u32 (token.buf[2] +  0);
+  digest[1] = hex_to_u32 (token.buf[2] +  8);
+  digest[2] = hex_to_u32 (token.buf[2] + 16);
+  digest[3] = hex_to_u32 (token.buf[2] + 24);
 
   // salt
 
@@ -196,6 +188,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -240,7 +234,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_kernel_accel_min         = MODULE_DEFAULT;
   module_ctx->module_kernel_loops_max         = MODULE_DEFAULT;
   module_ctx->module_kernel_loops_min         = MODULE_DEFAULT;
-  module_ctx->module_kernel_threads_max       = module_kernel_threads_max;
+  module_ctx->module_kernel_threads_max       = MODULE_DEFAULT;
   module_ctx->module_kernel_threads_min       = MODULE_DEFAULT;
   module_ctx->module_kern_type                = module_kern_type;
   module_ctx->module_kern_type_dynamic        = MODULE_DEFAULT;

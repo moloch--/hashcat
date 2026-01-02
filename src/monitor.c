@@ -42,6 +42,7 @@ int get_runtime_left (const hashcat_ctx_t *hashcat_ctx)
 
 static int monitor (hashcat_ctx_t *hashcat_ctx)
 {
+  bridge_ctx_t   *bridge_ctx    = hashcat_ctx->bridge_ctx;
   hashes_t       *hashes        = hashcat_ctx->hashes;
   hwmon_ctx_t    *hwmon_ctx     = hashcat_ctx->hwmon_ctx;
   backend_ctx_t  *backend_ctx   = hashcat_ctx->backend_ctx;
@@ -55,9 +56,10 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
   bool restore_check      = false;
   bool hwmon_check        = false;
   bool performance_check  = false;
+  bool performance_warned = false;
 
   const int    sleep_time = 1;
-  const double exec_low   = 50.0;  // in ms
+  const double exec_low   = 25.0;  // in ms
   const double util_low   = 90.0;  // in percent
 
   if (user_options->runtime)
@@ -87,7 +89,10 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
 
   if (hwmon_ctx->enabled == true)
   {
-    performance_check = true; // this check simply requires hwmon to work
+    if (bridge_ctx->enabled == false)
+    {
+      performance_check = true; // this check simply requires hwmon to work
+    }
   }
 
   if ((runtime_check == false) && (remove_check == false) && (status_check == false) && (restore_check == false) && (hwmon_check == false) && (performance_check == false))
@@ -245,7 +250,7 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
       }
     }
 
-    if (performance_check == true)
+    if (performance_check == true && status_ctx->devices_status == STATUS_RUNNING && performance_warned == false)
     {
       int exec_cnt = 0;
       int util_cnt = 0;
@@ -285,18 +290,22 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
       if (exec_cnt > 0) exec_avg = exec_total / exec_cnt;
       if (util_cnt > 0) util_avg = util_total / util_cnt;
 
-      if ((exec_avg > 0) && (exec_avg < exec_low))
+      if (((exec_avg > 0) && (exec_avg < exec_low)) || ((util_avg > 0) && (util_avg < util_low)))
       {
         performance_warnings++;
-
-        if (performance_warnings == 10) EVENT_DATA (EVENT_MONITOR_PERFORMANCE_HINT, NULL, 0);
+      }
+      else
+      {
+        if (performance_warnings > 0)
+        {
+          performance_warnings--;
+        }
       }
 
-      if ((util_avg > 0) && (util_avg < util_low))
+      if (performance_warnings == 10)
       {
-        performance_warnings++;
-
-        if (performance_warnings == 10) EVENT_DATA (EVENT_MONITOR_PERFORMANCE_HINT, NULL, 0);
+        performance_warned = true;
+        EVENT_DATA (EVENT_MONITOR_PERFORMANCE_HINT, NULL, 0);
       }
     }
 
@@ -325,6 +334,43 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
             EVENT_DATA (EVENT_MONITOR_NOINPUT_HINT, NULL, 0);
           }
         }
+      }
+    }
+
+    if (user_options->bypass_delay_chgd == true)
+    {
+      time (&status_ctx->timer_bypass_cur);
+
+      if (status_ctx->devices_status == STATUS_RUNNING)
+      {
+        // --bypass-delay check
+        if ((status_ctx->timer_bypass_cur - status_ctx->timer_bypass_start) >= user_options->bypass_delay)
+        {
+          time (&status_ctx->timer_bypass_start);
+
+          // --bypass-threshold check
+          if ((u32)(hashcat_ctx->hashes->digests_done_new - status_ctx->bypass_digests_done_new) < user_options->bypass_threshold)
+          {
+            event_log_info (hashcat_ctx, NULL);
+            event_log_info (hashcat_ctx, NULL);
+
+            bypass (hashcat_ctx);
+
+            event_log_info (hashcat_ctx, "Bypass threshold reached! Next dictionary / mask in queue selected. Bypassing current one.");
+
+            event_log_info (hashcat_ctx, NULL);
+            status_ctx->bypass_digests_done_new = 0;
+          }
+          else
+          {
+              // enough recovered to continue the session
+              status_ctx->bypass_digests_done_new = hashcat_ctx->hashes->digests_done_new;
+          }
+        }
+      }
+      else if (status_ctx->devices_status == STATUS_PAUSED)
+      {
+        status_ctx->timer_bypass_start += 1;
       }
     }
   }
@@ -363,11 +409,15 @@ static int monitor (hashcat_ctx_t *hashcat_ctx)
   return 0;
 }
 
+#if defined (_WIN32) || defined (__WIN32__)
+HC_API_CALL DWORD thread_monitor (void *p)
+#else
 HC_API_CALL void *thread_monitor (void *p)
+#endif
 {
   hashcat_ctx_t *hashcat_ctx = (hashcat_ctx_t *) p;
 
   monitor (hashcat_ctx); // we should give back some useful returncode
 
-  return NULL;
+  return 0;
 }

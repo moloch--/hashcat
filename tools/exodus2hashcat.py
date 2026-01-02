@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# Script to extract the hash for use with hashcat mode 28200
+
 # Author......: See docs/credits.txt
 # License.....: MIT
 # Target......: Exodus wallet extractor

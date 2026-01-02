@@ -26,51 +26,59 @@
 //Define Performance Metrics Log max sensors number
 #define ADL_PMLOG_MAX_SENSORS  256
 
+#if defined (__MSC_VER)
+#define HC_ADL_API_CALL __cdecl
+#elif defined (_WIN32) || defined (__WIN32__)
+#define HC_ADL_API_CALL __stdcall
+#else
+#define HC_ADL_API_CALL
+#endif
+
 typedef enum ADLSensorType
 {
-	SENSOR_MAXTYPES = 0,
-	PMLOG_CLK_GFXCLK = 1,
-	PMLOG_CLK_MEMCLK = 2,
-	PMLOG_CLK_SOCCLK = 3,
-	PMLOG_CLK_UVDCLK1 = 4,
-	PMLOG_CLK_UVDCLK2 = 5,
-	PMLOG_CLK_VCECLK = 6,
-	PMLOG_CLK_VCNCLK = 7,
-	PMLOG_TEMPERATURE_EDGE = 8,
-	PMLOG_TEMPERATURE_MEM = 9,
-	PMLOG_TEMPERATURE_VRVDDC = 10,
-	PMLOG_TEMPERATURE_VRMVDD = 11,
-	PMLOG_TEMPERATURE_LIQUID = 12,
-	PMLOG_TEMPERATURE_PLX = 13,
-	PMLOG_FAN_RPM = 14,
-	PMLOG_FAN_PERCENTAGE = 15,
-	PMLOG_SOC_VOLTAGE = 16,
-	PMLOG_SOC_POWER = 17,
-	PMLOG_SOC_CURRENT = 18,
-	PMLOG_INFO_ACTIVITY_GFX = 19,
-	PMLOG_INFO_ACTIVITY_MEM = 20,
-	PMLOG_GFX_VOLTAGE = 21,
-	PMLOG_MEM_VOLTAGE = 22,
-	PMLOG_ASIC_POWER = 23,
-	PMLOG_TEMPERATURE_VRSOC = 24,
-	PMLOG_TEMPERATURE_VRMVDD0 = 25,
-	PMLOG_TEMPERATURE_VRMVDD1 = 26,
-	PMLOG_TEMPERATURE_HOTSPOT = 27,
-        PMLOG_TEMPERATURE_GFX = 28,
-        PMLOG_TEMPERATURE_SOC = 29,
-        PMLOG_GFX_POWER = 30,
-        PMLOG_GFX_CURRENT = 31,
-        PMLOG_TEMPERATURE_CPU = 32,
-        PMLOG_CPU_POWER = 33,
-        PMLOG_CLK_CPUCLK = 34,
-        PMLOG_THROTTLER_STATUS = 35,
-        PMLOG_CLK_VCN1CLK1 = 36,
-        PMLOG_CLK_VCN1CLK2 = 37,
-        PMLOG_SMART_POWERSHIFT_CPU = 38,
-        PMLOG_SMART_POWERSHIFT_DGPU = 39,
-        PMLOG_BUS_SPEED = 40,
-        PMLOG_BUS_LANES = 41,
-	PMLOG_MAX_SENSORS_REAL
+  SENSOR_MAXTYPES = 0,
+  PMLOG_CLK_GFXCLK = 1,
+  PMLOG_CLK_MEMCLK = 2,
+  PMLOG_CLK_SOCCLK = 3,
+  PMLOG_CLK_UVDCLK1 = 4,
+  PMLOG_CLK_UVDCLK2 = 5,
+  PMLOG_CLK_VCECLK = 6,
+  PMLOG_CLK_VCNCLK = 7,
+  PMLOG_TEMPERATURE_EDGE = 8,
+  PMLOG_TEMPERATURE_MEM = 9,
+  PMLOG_TEMPERATURE_VRVDDC = 10,
+  PMLOG_TEMPERATURE_VRMVDD = 11,
+  PMLOG_TEMPERATURE_LIQUID = 12,
+  PMLOG_TEMPERATURE_PLX = 13,
+  PMLOG_FAN_RPM = 14,
+  PMLOG_FAN_PERCENTAGE = 15,
+  PMLOG_SOC_VOLTAGE = 16,
+  PMLOG_SOC_POWER = 17,
+  PMLOG_SOC_CURRENT = 18,
+  PMLOG_INFO_ACTIVITY_GFX = 19,
+  PMLOG_INFO_ACTIVITY_MEM = 20,
+  PMLOG_GFX_VOLTAGE = 21,
+  PMLOG_MEM_VOLTAGE = 22,
+  PMLOG_ASIC_POWER = 23,
+  PMLOG_TEMPERATURE_VRSOC = 24,
+  PMLOG_TEMPERATURE_VRMVDD0 = 25,
+  PMLOG_TEMPERATURE_VRMVDD1 = 26,
+  PMLOG_TEMPERATURE_HOTSPOT = 27,
+  PMLOG_TEMPERATURE_GFX = 28,
+  PMLOG_TEMPERATURE_SOC = 29,
+  PMLOG_GFX_POWER = 30,
+  PMLOG_GFX_CURRENT = 31,
+  PMLOG_TEMPERATURE_CPU = 32,
+  PMLOG_CPU_POWER = 33,
+  PMLOG_CLK_CPUCLK = 34,
+  PMLOG_THROTTLER_STATUS = 35,
+  PMLOG_CLK_VCN1CLK1 = 36,
+  PMLOG_CLK_VCN1CLK2 = 37,
+  PMLOG_SMART_POWERSHIFT_CPU = 38,
+  PMLOG_SMART_POWERSHIFT_DGPU = 39,
+  PMLOG_BUS_SPEED = 40,
+  PMLOG_BUS_LANES = 41,
+  PMLOG_MAX_SENSORS_REAL
 } ADLSensorType;
 
 /// Defines the maximum string length
@@ -212,11 +220,11 @@ typedef struct ADLThermalControllerInfo
 {
 /// Must be set to the size of the structure
   int iSize;
-/// Possible valies: \ref ADL_DL_THERMAL_DOMAIN_OTHER or \ref ADL_DL_THERMAL_DOMAIN_GPU.
+/// Possible values: \ref ADL_DL_THERMAL_DOMAIN_OTHER or \ref ADL_DL_THERMAL_DOMAIN_GPU.
   int iThermalDomain;
 ///    GPU 0, 1, etc.
   int iDomainIndex;
-/// Possible valies: \ref ADL_DL_THERMAL_FLAG_INTERRUPT or \ref ADL_DL_THERMAL_FLAG_FANCONTROL
+/// Possible values: \ref ADL_DL_THERMAL_FLAG_INTERRUPT or \ref ADL_DL_THERMAL_FLAG_FANCONTROL
   int iFlags;
 } ADLThermalControllerInfo;
 
@@ -269,7 +277,7 @@ typedef struct ADLFanSpeedValue
 {
 /// Must be set to the size of the structure
   int iSize;
-/// Possible valies: \ref ADL_DL_FANCTRL_SPEED_TYPE_PERCENT or \ref ADL_DL_FANCTRL_SPEED_TYPE_RPM
+/// Possible values: \ref ADL_DL_FANCTRL_SPEED_TYPE_PERCENT or \ref ADL_DL_FANCTRL_SPEED_TYPE_RPM
   int iSpeedType;
 /// Fan speed value
   int iFanSpeed;
@@ -596,7 +604,7 @@ typedef int (ADL_API_CALL *ADL_ADAPTER_ACTIVE_GET ) ( int, int* );
 typedef int (ADL_API_CALL *ADL_ADAPTER_ADAPTERINFO_GET ) ( LPAdapterInfo, int );
 typedef int (ADL_API_CALL *ADL_ADAPTER_NUMBEROFADAPTERS_GET ) ( int* );
 typedef int (ADL_API_CALL *ADL_MAIN_CONTROL_CREATE )(ADL_MAIN_MALLOC_CALLBACK, int );
-typedef int (ADL_API_CALL *ADL_MAIN_CONTROL_DESTROY )();
+typedef int (ADL_API_CALL *ADL_MAIN_CONTROL_DESTROY )(void);
 typedef int (ADL_API_CALL *ADL_OVERDRIVE5_CURRENTACTIVITY_GET ) (int iAdapterIndex, ADLPMActivity *lpActivity);
 typedef int (ADL_API_CALL *ADL_OVERDRIVE5_FANSPEEDINFO_GET ) (int iAdapterIndex, int iThermalControllerIndex, ADLFanSpeedInfo *lpFanSpeedInfo);
 typedef int (ADL_API_CALL *ADL_OVERDRIVE5_FANSPEED_GET ) (int iAdapterIndex, int iThermalControllerIndex, ADLFanSpeedValue *lpFanSpeedValue);
@@ -642,7 +650,7 @@ typedef struct hm_adl_lib
 
 typedef hm_adl_lib_t ADL_PTR;
 
-void *HC_API_CALL ADL_Main_Memory_Alloc (const int iSize);
+void *HC_ADL_API_CALL ADL_Main_Memory_Alloc (const int iSize);
 
 int adl_init (void *hashcat_ctx);
 void adl_close (void *hashcat_ctx);

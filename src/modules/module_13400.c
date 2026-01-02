@@ -17,7 +17,7 @@ static const u32   DGST_POS2      = 2;
 static const u32   DGST_POS3      = 3;
 static const u32   DGST_SIZE      = DGST_SIZE_4_4;
 static const u32   HASH_CATEGORY  = HASH_CATEGORY_PASSWORD_MANAGER;
-static const char *HASH_NAME      = "KeePass 1 (AES/Twofish) and KeePass 2 (AES)";
+static const char *HASH_NAME      = "KeePass (KDBX v2/v3)";
 static const u64   KERN_TYPE      = 13400;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
@@ -86,16 +86,6 @@ u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED c
   return tmp_size;
 }
 
-u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  // this overrides the reductions of PW_MAX in case optimized kernel is selected
-  // IOW, even in optimized kernel mode it support length 256
-
-  const u32 pw_max = PW_MAX;
-
-  return pw_max;
-}
-
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)
 {
   u32 *digest = (u32 *) digest_buf;
@@ -138,8 +128,6 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   token.len_max[3] = 3;
   token.attr[3]    = TOKEN_ATTR_VERIFY_LENGTH
                    | TOKEN_ATTR_VERIFY_DIGIT;
-
-  if (line_len < 16) return (PARSER_SALT_LENGTH);
 
   const u8 version = line_buf[10];
 
@@ -268,6 +256,8 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   keepass->version = hc_strtoul ((const char *) version_pos, NULL, 10);
 
+  if (keepass->version > 2) return (PARSER_HASH_VALUE); // this hash-type only supports versions 1 and 2; version 4 is supported by hash-types 34300 and 34301
+
   // iter
 
   const u8 *rounds_pos = token.buf[2];
@@ -284,10 +274,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *final_random_seed_pos = token.buf[4];
 
-  keepass->final_random_seed[0] = hex_to_u32 ((const u8 *) &final_random_seed_pos[ 0]);
-  keepass->final_random_seed[1] = hex_to_u32 ((const u8 *) &final_random_seed_pos[ 8]);
-  keepass->final_random_seed[2] = hex_to_u32 ((const u8 *) &final_random_seed_pos[16]);
-  keepass->final_random_seed[3] = hex_to_u32 ((const u8 *) &final_random_seed_pos[24]);
+  keepass->final_random_seed[0] = hex_to_u32 (&final_random_seed_pos[ 0]);
+  keepass->final_random_seed[1] = hex_to_u32 (&final_random_seed_pos[ 8]);
+  keepass->final_random_seed[2] = hex_to_u32 (&final_random_seed_pos[16]);
+  keepass->final_random_seed[3] = hex_to_u32 (&final_random_seed_pos[24]);
 
   keepass->final_random_seed[0] = byte_swap_32 (keepass->final_random_seed[0]);
   keepass->final_random_seed[1] = byte_swap_32 (keepass->final_random_seed[1]);
@@ -296,10 +286,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   if (keepass->version == 2)
   {
-    keepass->final_random_seed[4] = hex_to_u32 ((const u8 *) &final_random_seed_pos[32]);
-    keepass->final_random_seed[5] = hex_to_u32 ((const u8 *) &final_random_seed_pos[40]);
-    keepass->final_random_seed[6] = hex_to_u32 ((const u8 *) &final_random_seed_pos[48]);
-    keepass->final_random_seed[7] = hex_to_u32 ((const u8 *) &final_random_seed_pos[56]);
+    keepass->final_random_seed[4] = hex_to_u32 (&final_random_seed_pos[32]);
+    keepass->final_random_seed[5] = hex_to_u32 (&final_random_seed_pos[40]);
+    keepass->final_random_seed[6] = hex_to_u32 (&final_random_seed_pos[48]);
+    keepass->final_random_seed[7] = hex_to_u32 (&final_random_seed_pos[56]);
 
     keepass->final_random_seed[4] = byte_swap_32 (keepass->final_random_seed[4]);
     keepass->final_random_seed[5] = byte_swap_32 (keepass->final_random_seed[5]);
@@ -311,14 +301,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *transf_random_seed_pos = token.buf[5];
 
-  keepass->transf_random_seed[0] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[ 0]);
-  keepass->transf_random_seed[1] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[ 8]);
-  keepass->transf_random_seed[2] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[16]);
-  keepass->transf_random_seed[3] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[24]);
-  keepass->transf_random_seed[4] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[32]);
-  keepass->transf_random_seed[5] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[40]);
-  keepass->transf_random_seed[6] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[48]);
-  keepass->transf_random_seed[7] = hex_to_u32 ((const u8 *) &transf_random_seed_pos[56]);
+  keepass->transf_random_seed[0] = hex_to_u32 (&transf_random_seed_pos[ 0]);
+  keepass->transf_random_seed[1] = hex_to_u32 (&transf_random_seed_pos[ 8]);
+  keepass->transf_random_seed[2] = hex_to_u32 (&transf_random_seed_pos[16]);
+  keepass->transf_random_seed[3] = hex_to_u32 (&transf_random_seed_pos[24]);
+  keepass->transf_random_seed[4] = hex_to_u32 (&transf_random_seed_pos[32]);
+  keepass->transf_random_seed[5] = hex_to_u32 (&transf_random_seed_pos[40]);
+  keepass->transf_random_seed[6] = hex_to_u32 (&transf_random_seed_pos[48]);
+  keepass->transf_random_seed[7] = hex_to_u32 (&transf_random_seed_pos[56]);
 
   keepass->transf_random_seed[0] = byte_swap_32 (keepass->transf_random_seed[0]);
   keepass->transf_random_seed[1] = byte_swap_32 (keepass->transf_random_seed[1]);
@@ -333,10 +323,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *enc_iv_pos = token.buf[6];
 
-  keepass->enc_iv[0] = hex_to_u32 ((const u8 *) &enc_iv_pos[ 0]);
-  keepass->enc_iv[1] = hex_to_u32 ((const u8 *) &enc_iv_pos[ 8]);
-  keepass->enc_iv[2] = hex_to_u32 ((const u8 *) &enc_iv_pos[16]);
-  keepass->enc_iv[3] = hex_to_u32 ((const u8 *) &enc_iv_pos[24]);
+  keepass->enc_iv[0] = hex_to_u32 (&enc_iv_pos[ 0]);
+  keepass->enc_iv[1] = hex_to_u32 (&enc_iv_pos[ 8]);
+  keepass->enc_iv[2] = hex_to_u32 (&enc_iv_pos[16]);
+  keepass->enc_iv[3] = hex_to_u32 (&enc_iv_pos[24]);
 
   keepass->enc_iv[0] = byte_swap_32 (keepass->enc_iv[0]);
   keepass->enc_iv[1] = byte_swap_32 (keepass->enc_iv[1]);
@@ -351,14 +341,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
     const u8 *contents_hash_pos = token.buf[7];
 
-    keepass->contents_hash[0] = hex_to_u32 ((const u8 *) &contents_hash_pos[ 0]);
-    keepass->contents_hash[1] = hex_to_u32 ((const u8 *) &contents_hash_pos[ 8]);
-    keepass->contents_hash[2] = hex_to_u32 ((const u8 *) &contents_hash_pos[16]);
-    keepass->contents_hash[3] = hex_to_u32 ((const u8 *) &contents_hash_pos[24]);
-    keepass->contents_hash[4] = hex_to_u32 ((const u8 *) &contents_hash_pos[32]);
-    keepass->contents_hash[5] = hex_to_u32 ((const u8 *) &contents_hash_pos[40]);
-    keepass->contents_hash[6] = hex_to_u32 ((const u8 *) &contents_hash_pos[48]);
-    keepass->contents_hash[7] = hex_to_u32 ((const u8 *) &contents_hash_pos[56]);
+    keepass->contents_hash[0] = hex_to_u32 (&contents_hash_pos[ 0]);
+    keepass->contents_hash[1] = hex_to_u32 (&contents_hash_pos[ 8]);
+    keepass->contents_hash[2] = hex_to_u32 (&contents_hash_pos[16]);
+    keepass->contents_hash[3] = hex_to_u32 (&contents_hash_pos[24]);
+    keepass->contents_hash[4] = hex_to_u32 (&contents_hash_pos[32]);
+    keepass->contents_hash[5] = hex_to_u32 (&contents_hash_pos[40]);
+    keepass->contents_hash[6] = hex_to_u32 (&contents_hash_pos[48]);
+    keepass->contents_hash[7] = hex_to_u32 (&contents_hash_pos[56]);
 
     keepass->contents_hash[0] = byte_swap_32 (keepass->contents_hash[0]);
     keepass->contents_hash[1] = byte_swap_32 (keepass->contents_hash[1]);
@@ -378,7 +368,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
     for (int i = 0, j = 0; j < contents_len; i += 1, j += 8)
     {
-      keepass->contents[i] = hex_to_u32 ((const u8 *) &contents_pos[j]);
+      keepass->contents[i] = hex_to_u32 (&contents_pos[j]);
 
       keepass->contents[i] = byte_swap_32 (keepass->contents[i]);
     }
@@ -394,14 +384,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
     const u8 *expected_bytes_pos = token.buf[7];
 
-    keepass->expected_bytes[0] = hex_to_u32 ((const u8 *) &expected_bytes_pos[ 0]);
-    keepass->expected_bytes[1] = hex_to_u32 ((const u8 *) &expected_bytes_pos[ 8]);
-    keepass->expected_bytes[2] = hex_to_u32 ((const u8 *) &expected_bytes_pos[16]);
-    keepass->expected_bytes[3] = hex_to_u32 ((const u8 *) &expected_bytes_pos[24]);
-    keepass->expected_bytes[4] = hex_to_u32 ((const u8 *) &expected_bytes_pos[32]);
-    keepass->expected_bytes[5] = hex_to_u32 ((const u8 *) &expected_bytes_pos[40]);
-    keepass->expected_bytes[6] = hex_to_u32 ((const u8 *) &expected_bytes_pos[48]);
-    keepass->expected_bytes[7] = hex_to_u32 ((const u8 *) &expected_bytes_pos[56]);
+    keepass->expected_bytes[0] = hex_to_u32 (&expected_bytes_pos[ 0]);
+    keepass->expected_bytes[1] = hex_to_u32 (&expected_bytes_pos[ 8]);
+    keepass->expected_bytes[2] = hex_to_u32 (&expected_bytes_pos[16]);
+    keepass->expected_bytes[3] = hex_to_u32 (&expected_bytes_pos[24]);
+    keepass->expected_bytes[4] = hex_to_u32 (&expected_bytes_pos[32]);
+    keepass->expected_bytes[5] = hex_to_u32 (&expected_bytes_pos[40]);
+    keepass->expected_bytes[6] = hex_to_u32 (&expected_bytes_pos[48]);
+    keepass->expected_bytes[7] = hex_to_u32 (&expected_bytes_pos[56]);
 
     keepass->expected_bytes[0] = byte_swap_32 (keepass->expected_bytes[0]);
     keepass->expected_bytes[1] = byte_swap_32 (keepass->expected_bytes[1]);
@@ -416,14 +406,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
     const u8 *contents_hash_pos = token.buf[8];
 
-    keepass->contents_hash[0] = hex_to_u32 ((const u8 *) &contents_hash_pos[ 0]);
-    keepass->contents_hash[1] = hex_to_u32 ((const u8 *) &contents_hash_pos[ 8]);
-    keepass->contents_hash[2] = hex_to_u32 ((const u8 *) &contents_hash_pos[16]);
-    keepass->contents_hash[3] = hex_to_u32 ((const u8 *) &contents_hash_pos[24]);
-    keepass->contents_hash[4] = hex_to_u32 ((const u8 *) &contents_hash_pos[32]);
-    keepass->contents_hash[5] = hex_to_u32 ((const u8 *) &contents_hash_pos[40]);
-    keepass->contents_hash[6] = hex_to_u32 ((const u8 *) &contents_hash_pos[48]);
-    keepass->contents_hash[7] = hex_to_u32 ((const u8 *) &contents_hash_pos[56]);
+    keepass->contents_hash[0] = hex_to_u32 (&contents_hash_pos[ 0]);
+    keepass->contents_hash[1] = hex_to_u32 (&contents_hash_pos[ 8]);
+    keepass->contents_hash[2] = hex_to_u32 (&contents_hash_pos[16]);
+    keepass->contents_hash[3] = hex_to_u32 (&contents_hash_pos[24]);
+    keepass->contents_hash[4] = hex_to_u32 (&contents_hash_pos[32]);
+    keepass->contents_hash[5] = hex_to_u32 (&contents_hash_pos[40]);
+    keepass->contents_hash[6] = hex_to_u32 (&contents_hash_pos[48]);
+    keepass->contents_hash[7] = hex_to_u32 (&contents_hash_pos[56]);
 
     keepass->contents_hash[0] = byte_swap_32 (keepass->contents_hash[0]);
     keepass->contents_hash[1] = byte_swap_32 (keepass->contents_hash[1]);
@@ -444,14 +434,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   {
     keepass->keyfile_len = 32;
 
-    keepass->keyfile[0] = hex_to_u32 ((const u8 *) &keyfile_pos[ 0]);
-    keepass->keyfile[1] = hex_to_u32 ((const u8 *) &keyfile_pos[ 8]);
-    keepass->keyfile[2] = hex_to_u32 ((const u8 *) &keyfile_pos[16]);
-    keepass->keyfile[3] = hex_to_u32 ((const u8 *) &keyfile_pos[24]);
-    keepass->keyfile[4] = hex_to_u32 ((const u8 *) &keyfile_pos[32]);
-    keepass->keyfile[5] = hex_to_u32 ((const u8 *) &keyfile_pos[40]);
-    keepass->keyfile[6] = hex_to_u32 ((const u8 *) &keyfile_pos[48]);
-    keepass->keyfile[7] = hex_to_u32 ((const u8 *) &keyfile_pos[56]);
+    keepass->keyfile[0] = hex_to_u32 (&keyfile_pos[ 0]);
+    keepass->keyfile[1] = hex_to_u32 (&keyfile_pos[ 8]);
+    keepass->keyfile[2] = hex_to_u32 (&keyfile_pos[16]);
+    keepass->keyfile[3] = hex_to_u32 (&keyfile_pos[24]);
+    keepass->keyfile[4] = hex_to_u32 (&keyfile_pos[32]);
+    keepass->keyfile[5] = hex_to_u32 (&keyfile_pos[40]);
+    keepass->keyfile[6] = hex_to_u32 (&keyfile_pos[48]);
+    keepass->keyfile[7] = hex_to_u32 (&keyfile_pos[56]);
 
     keepass->keyfile[0] = byte_swap_32 (keepass->keyfile[0]);
     keepass->keyfile[1] = byte_swap_32 (keepass->keyfile[1]);
@@ -509,15 +499,15 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   u32 algorithm   = keepass->algorithm;
   u32 keyfile_len = keepass->keyfile_len;
 
-  u32 *ptr_final_random_seed  = (u32 *) keepass->final_random_seed;
-  u32 *ptr_transf_random_seed = (u32 *) keepass->transf_random_seed;
-  u32 *ptr_enc_iv             = (u32 *) keepass->enc_iv;
-  u32 *ptr_contents_hash      = (u32 *) keepass->contents_hash;
-  u32 *ptr_keyfile            = (u32 *) keepass->keyfile;
+  const u32 *ptr_final_random_seed  = (const u32 *) keepass->final_random_seed;
+  const u32 *ptr_transf_random_seed = (const u32 *) keepass->transf_random_seed;
+  const u32 *ptr_enc_iv             = (const u32 *) keepass->enc_iv;
+  const u32 *ptr_contents_hash      = (const u32 *) keepass->contents_hash;
+  const u32 *ptr_keyfile            = (const u32 *) keepass->keyfile;
 
   // specific to version 2
   u32 expected_bytes_len;
-  u32 *ptr_expected_bytes;
+  const u32 *ptr_expected_bytes;
 
   u32 final_random_seed_len;
   u32 transf_random_seed_len;
@@ -545,20 +535,17 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   *ptr_data = '*';
   ptr_data++;
 
-  for (u32 i = 0; i < final_random_seed_len; i++, ptr_data += 8)
-    sprintf (ptr_data, "%08x", ptr_final_random_seed[i]);
+  for (u32 i = 0; i < final_random_seed_len; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_final_random_seed[i]);
 
   *ptr_data = '*';
   ptr_data++;
 
-  for (u32 i = 0; i < transf_random_seed_len; i++, ptr_data += 8)
-    sprintf (ptr_data, "%08x", ptr_transf_random_seed[i]);
+  for (u32 i = 0; i < transf_random_seed_len; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_transf_random_seed[i]);
 
   *ptr_data = '*';
   ptr_data++;
 
-  for (u32 i = 0; i < enc_iv_len; i++, ptr_data += 8)
-    sprintf (ptr_data, "%08x", ptr_enc_iv[i]);
+  for (u32 i = 0; i < enc_iv_len; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_enc_iv[i]);
 
   *ptr_data = '*';
   ptr_data++;
@@ -566,10 +553,9 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   if (version == 1)
   {
     u32  contents_len =         keepass->contents_len;
-    u32 *ptr_contents = (u32 *) keepass->contents;
+    const u32 *ptr_contents = (const u32 *) keepass->contents;
 
-    for (u32 i = 0; i < contents_hash_len; i++, ptr_data += 8)
-      sprintf (ptr_data, "%08x", ptr_contents_hash[i]);
+    for (u32 i = 0; i < contents_hash_len; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_contents_hash[i]);
 
     *ptr_data = '*';
     ptr_data++;
@@ -583,31 +569,28 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
     char ptr_contents_len[10] = { 0 };
 
-    sprintf ((char*) ptr_contents_len, "%u", contents_len);
+    snprintf ((char*) ptr_contents_len, sizeof (ptr_contents_len), "%u", contents_len);
 
-    sprintf (ptr_data, "%u", contents_len);
+    snprintf (ptr_data, sizeof (ptr_contents_len), "%u", contents_len);
 
     ptr_data += strlen (ptr_contents_len);
 
     *ptr_data = '*';
     ptr_data++;
 
-    for (u32 i = 0; i < contents_len / 4; i++, ptr_data += 8)
-      sprintf (ptr_data, "%08x", ptr_contents[i]);
+    for (u32 i = 0; i < contents_len / 4; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_contents[i]);
   }
   else if (version == 2)
   {
     expected_bytes_len = 8;
-    ptr_expected_bytes = (u32 *) keepass->expected_bytes;
+    ptr_expected_bytes = (const u32 *) keepass->expected_bytes;
 
-    for (u32 i = 0; i < expected_bytes_len; i++, ptr_data += 8)
-      sprintf (ptr_data, "%08x", ptr_expected_bytes[i]);
+    for (u32 i = 0; i < expected_bytes_len; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_expected_bytes[i]);
 
     *ptr_data = '*';
     ptr_data++;
 
-    for (u32 i = 0; i < contents_hash_len; i++, ptr_data += 8)
-      sprintf (ptr_data, "%08x", ptr_contents_hash[i]);
+    for (u32 i = 0; i < contents_hash_len; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_contents_hash[i]);
   }
 
   if (keyfile_len)
@@ -622,15 +605,14 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     *ptr_data = '*';
     ptr_data++;
 
-    sprintf (ptr_data, "%u", keyfile_len * 2);
+    snprintf (ptr_data, 3, "%u", keyfile_len * 2);
 
     ptr_data += 2;
 
     *ptr_data = '*';
     ptr_data++;
 
-    for (u32 i = 0; i < 8; i++, ptr_data += 8)
-      sprintf (ptr_data, "%08x", ptr_keyfile[i]);
+    for (u32 i = 0; i < 8; i++, ptr_data += 8) snprintf (ptr_data, 9, "%08x", ptr_keyfile[i]);
   }
 
   return strlen (line_buf);
@@ -647,6 +629,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -703,7 +687,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;
-  module_ctx->module_pw_max                   = module_pw_max;
+  module_ctx->module_pw_max                   = MODULE_DEFAULT;
   module_ctx->module_pw_min                   = MODULE_DEFAULT;
   module_ctx->module_salt_max                 = MODULE_DEFAULT;
   module_ctx->module_salt_min                 = MODULE_DEFAULT;

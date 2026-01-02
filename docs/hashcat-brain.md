@@ -24,10 +24,10 @@ Before you try it out yourself, let me show you a few examples.
 
 There's no doubt that rule-based attacks are the greatest general purpose attack-modifier on an existing wordlist. But they have a little-known problem: They produce a lot of duplicate candidates. While this is not relevant for fast hashes, it has a large impact on slow hashes.
 
-In this example, we apply best64.rule to example.dict, and writes the result to test.txt:
+In this example, we apply best66.rule to example.dict, and writes the result to test.txt:
 
 ```
-$ ./hashcat --stdout example.dict -r rules/best64.rule -o test.txt
+$ ./hashcat --stdout example.dict -r rules/best66.rule -o test.txt
 ```
 
 Now we can see how many candidates were produced:
@@ -47,7 +47,7 @@ $ sort -u test.txt | wc -l
 Of course, the wordlist and rules used have a large impact on the number of duplicates. In our example - a common wordlist and general purpose rule - the average ratio of produced dupes seems to be around 25%. And all of these dupes are detected by the brain:
 
 ```
-$ ./hashcat -z example0.hash example.dict -r rules/best64.rule
+$ ./hashcat -z example0.hash example.dict -r rules/best66.rule
 ...
 Rejected.........: 2379391/9888032 (24.06%)
 ```
@@ -203,7 +203,7 @@ Each password candidate creates a hash of 8 bytes that has to be transferred, lo
 
 So let's assume a candidate list size of 8,000,000,000. That doesn't sound like too much - especially if you want to work with rules and masks. It should be clear that using the hashcat brain against a raw MD5 is not very efficient. But now things become interesting, because of some unexpected effects that kick in.
 
-Imagine you have a salted MD5 list, let's say VBULL which is a fast hash (not a slow hash) - and you have many of them. In thise case, each of the salts starts to work for us.
+Imagine you have a salted MD5 list, let's say VBULL which is a fast hash (not a slow hash) - and you have many of them. In this case, each of the salts starts to work for us.
 
 Yes, you read that right - the more salts, the better!!
 

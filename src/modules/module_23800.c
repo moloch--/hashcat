@@ -20,7 +20,8 @@ static const u32   DGST_SIZE      = DGST_SIZE_4_4; // actually only DGST_SIZE_4_
 static const u32   HASH_CATEGORY  = HASH_CATEGORY_ARCHIVE;
 static const char *HASH_NAME      = "RAR3-p (Compressed)";
 static const u64   KERN_TYPE      = 23800;
-static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE;
+static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
+                                  | OPTI_TYPE_REGISTER_LIMIT;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_PT_GENERATE_LE
                                   | OPTS_TYPE_HOOK23
@@ -72,6 +73,8 @@ typedef struct rar3_hook
   u32 iv[4];
 
   u32 first_block_decrypted[4];
+
+  u32 unpack_failed;
 
   u32 crc32;
 
@@ -203,10 +206,13 @@ static int check_huffman (const unsigned char *next)
 
 bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
-  // AMD Radeon Pro W5700X Compute Engine; 1.2 (Apr 22 2021 21:54:44); 11.3.1; 20E241
   if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
   {
-    return true;
+    if (device_param->opencl_device_vendor_id == VENDOR_ID_INTEL_SDK)
+    {
+      // Intel Iris
+      return true;
+    }
   }
 
   return false;
@@ -286,17 +292,17 @@ bool module_hook_extra_param_term (MAYBE_UNUSED const hashconfig_t *hashconfig, 
   return true;
 }
 
-unsigned int hc_decompress_rar (unsigned char *Win, unsigned char *Inp, unsigned char *VM, unsigned char *PPM, const unsigned int OutputSize, const unsigned char *Input, const unsigned int PackSize, const unsigned int UnpackSize, const unsigned char *Key, const unsigned char *IV);
+unsigned int hc_decompress_rar (unsigned char *Win, unsigned char *Inp, unsigned char *VM, unsigned char *PPM, const unsigned int OutputSize, const unsigned char *Input, const unsigned int PackSize, const unsigned int UnpackSize, const unsigned char *Key, const unsigned char *IV, unsigned int *unpack_failed);
 
 void module_hook23 (hc_device_param_t *device_param, const void *hook_extra_param, const void *hook_salts_buf, const u32 salt_pos, const u64 pw_pos)
 {
   rar3_hook_t *hook_items = (rar3_hook_t *) device_param->hooks_buf;
   rar3_hook_t *hook_item  = &hook_items[pw_pos];
 
-  rar3_hook_salt_t *rar3s = (rar3_hook_salt_t *) hook_salts_buf;
-  rar3_hook_salt_t *rar3  = &rar3s[salt_pos];
+  const rar3_hook_salt_t *rar3s = (const rar3_hook_salt_t *) hook_salts_buf;
+  const rar3_hook_salt_t *rar3  = &rar3s[salt_pos];
 
-  rar3_hook_extra_t *rar3_hook_extra = (rar3_hook_extra_t *) hook_extra_param;
+  const rar3_hook_extra_t *rar3_hook_extra = (const rar3_hook_extra_t *) hook_extra_param;
 
   const unsigned int pack_size   = (const unsigned int) rar3->pack_size;
   const unsigned int unpack_size = (const unsigned int) rar3->unpack_size;
@@ -323,12 +329,14 @@ void module_hook23 (hc_device_param_t *device_param, const void *hook_extra_para
     }
   }
 
-  const u8 *data = (u8 *) rar3->data;
+  const u8 *data = (const u8 *) rar3->data;
 
   const u8 *key = (u8 *) hook_item->key;
   const u8 *iv  = (u8 *) hook_item->iv;
 
-  const u32 crc32 = hc_decompress_rar (rar3_hook_extra->win[device_param->device_id], rar3_hook_extra->inp[device_param->device_id], rar3_hook_extra->vm[device_param->device_id], rar3_hook_extra->ppm[device_param->device_id], unpack_size, data, pack_size, unpack_size, key, iv);
+  hook_item->unpack_failed = 1;
+
+  const u32 crc32 = hc_decompress_rar (rar3_hook_extra->win[device_param->device_id], rar3_hook_extra->inp[device_param->device_id], rar3_hook_extra->vm[device_param->device_id], rar3_hook_extra->ppm[device_param->device_id], unpack_size, data, pack_size, unpack_size, key, iv, &hook_item->unpack_failed);
 
   hook_item->crc32 = crc32;
 }
@@ -356,7 +364,7 @@ u64 module_hook_extra_param_size (MAYBE_UNUSED const hashconfig_t *hashconfig, M
 
 u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
-  const bool optimized_kernel = user_options->optimized_kernel_enable;
+  const bool optimized_kernel = user_options->optimized_kernel;
 
   u64 tmp_size = (u64) sizeof (rar3_tmp_t);
 
@@ -567,7 +575,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 {
   const u32 *digest = (const u32 *) digest_buf;
 
-  rar3_hook_salt_t *rar3_hook_salt = (rar3_hook_salt_t *) hook_salt_buf;
+  const rar3_hook_salt_t *rar3_hook_salt = (const rar3_hook_salt_t *) hook_salt_buf;
 
   const u32 data_len = rar3_hook_salt->pack_size;
 
@@ -603,6 +611,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = module_benchmark_mask;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

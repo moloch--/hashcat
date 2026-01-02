@@ -5,7 +5,7 @@
 ## License.....: MIT
 ##
 
-OPTS="--quiet --potfile-disable --hwmon-disable --logfile-disable"
+OPTS="--quiet --potfile-disable --logfile-disable"
 
 FORCE=0
 RUNTIME=400
@@ -22,15 +22,20 @@ VC_MODES="13711 13712 13713 13721 13722 13723 13731 13732 13733 13741 13742 1374
 NOCHECK_ENCODING="16800 22000"
 
 # List of LUKS modes which have test containers
-LUKS_MODES="14600 29511 29512 29513 29521 29522 29523 29531 29532 29533 29541 29542 29543"
+LUKS1_LEGACY_MODE="14600"
+LUKS1_MODES="29511 29512 29513 29521 29522 29523 29531 29532 29533 29541 29542 29543"
+LUKS1_ALL_MODES="${LUKS1_LEGACY_MODE} ${LUKS1_MODES}"
+
+# List of LUKS2 modes which have test containers
+LUKS2_MODES="34100"
+
+LUKS_MODES="${LUKS1_MODES} ${LUKS2_MODES}"
 
 # Cryptoloop mode which have test containers
 CL_MODES="14511 14512 14513 14521 14522 14523 14531 14532 14533 14541 14542 14543 14551 14552 14553"
 
-# missing hash types: 5200
-
 HASH_TYPES=$(ls "${TDIR}"/test_modules/*.pm | sed -E 's/.*m0*([0-9]+).pm/\1/')
-HASH_TYPES="${HASH_TYPES} ${TC_MODES} ${VC_MODES} ${LUKS_MODES} ${CL_MODES}"
+HASH_TYPES="${HASH_TYPES} ${TC_MODES} ${VC_MODES} ${LUKS1_ALL_MODES} ${LUKS2_MODES} ${CL_MODES}"
 HASH_TYPES=$(echo -n "${HASH_TYPES}" | tr ' ' '\n' | sort -u -n | tr '\n' ' ')
 
 VECTOR_WIDTHS="1 2 4 8 16"
@@ -42,7 +47,7 @@ SLOW_ALGOS=$(   grep -l ATTACK_EXEC_OUTSIDE_KERNEL "${TDIR}"/../src/modules/modu
 # fake slow algos, due to specific password pattern (e.g. ?d from "mask_3" is invalid):
 # ("only" drawback is that just -a 0 is tested with this workaround)
 
-SLOW_ALGOS="${SLOW_ALGOS} 28501 28502 28503 28504 28505 28506 30901 30902 30903 30904 30905 30906"
+SLOW_ALGOS="${SLOW_ALGOS} 28501 28502 28503 28504 28505 28506 30901 30902 30903 30904 30905 30906 34700"
 
 OUTD="test_$(date +%s)"
 
@@ -164,6 +169,24 @@ function is_in_array()
   return 1
 }
 
+function has_multi_hash()
+{
+  # no multi hash checks for these modes (because we only have 1 hash for each of them)
+  if   [ "${hash_type}" -eq 14000 ]; then
+    return 0;
+  elif [ "${hash_type}" -eq 14100 ]; then
+    return 0;
+  elif [ "${hash_type}" -eq 14600 ]; then
+    return 0;
+  elif [ "${hash_type}" -eq 14900 ]; then
+    return 0;
+  elif [ "${hash_type}" -eq 15400 ]; then
+    return 0;
+  fi
+
+  # all other modes have multi hash
+  return 1;
+}
 function init()
 {
   if [ "${PACKAGE}" -eq 1 ]; then
@@ -185,13 +208,16 @@ function init()
     return 0
   fi
 
-  if is_in_array "${hash_type}" ${LUKS_MODES}; then
+  if { is_in_array "$hash_type" ${LUKS1_ALL_MODES} || is_in_array "$hash_type" ${LUKS2_MODES}; } && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ; then
     which 7z &>/dev/null
     if [ $? -eq 1 ]; then
       echo "ATTENTION: 7z is missing. Skipping download and extract luks test files."
       return 0
     fi
+  fi
 
+  #LUKS1
+  if is_in_array "$hash_type" ${LUKS1_ALL_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ; then
     luks_tests_folder="${TDIR}/luks_tests/"
 
     if [ ! -d "${luks_tests_folder}" ]; then
@@ -218,7 +244,7 @@ function init()
       echo "They will be fetched from ${luks_tests_url}"
       echo "Note: this needs to be done only once and could take a little bit to download/extract."
       echo "These luks test files are not shipped directly with hashcat because the file sizes are"
-      echo "particularily large and therefore a bandwidth burner for users who do not run these tests."
+      echo "particularly large and therefore a bandwidth burner for users who do not run these tests."
       echo ""
 
       # download:
@@ -250,6 +276,67 @@ function init()
     return 0
   fi
 
+
+  #LUKS2
+  if is_in_array "$hash_type" ${LUKS2_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
+    luks2_tests_folder="${TDIR}/luks2_tests/"
+
+    if [ ! -d "${luks2_tests_folder}" ]; then
+      mkdir -p "${luks2_tests_folder}"
+    fi
+
+    luks2_first_test_file="${luks2_tests_folder}/luks2-aes-argon2id-t4-m16-p1-size20MiB.img"
+
+    if [ ! -f "${luks2_first_test_file}" ]; then
+      luks2_tests="luks2_tests.7z"
+      luks2_tests_url="https://hashcat.net/misc/example_hashes/${luks2_tests}"
+
+      cd "${TDIR}" || exit
+
+      # if the file already exists, but was not successfully extracted, we assume it's a broken
+      # downloaded file and therefore it should be deleted
+
+      if [ -f "${luks2_tests}" ]; then
+        rm -f "${luks2_tests}"
+      fi
+
+      echo ""
+      echo "ATTENTION: the luks2 test files (for -m ${hash_type}) are currently missing on your system."
+      echo "They will be fetched from ${luks2_tests_url}"
+      echo "Note: this needs to be done only once and could take a little bit to download/extract."
+      echo "These luks2 test files are not shipped directly with hashcat because the file sizes are"
+      echo "particularly large and therefore a bandwidth burner for users who do not run these tests."
+      echo ""
+
+      # download:
+      wget -q "${luks2_tests_url}"
+
+      if [ $? -ne 0 ] || [ ! -f "${luks2_tests}" ]; then
+        cd - >/dev/null
+        echo "ERROR: Could not fetch the luks2 test files from this url: ${luks2_tests_url}"
+        return 0
+      fi
+
+      # extract:
+
+      ${EXTRACT_CMD} "${luks2_tests}" &>/dev/null
+
+      # cleanup:
+
+      rm -f "${luks2_tests}"
+      cd - >/dev/null || exit
+
+      # just to be very sure, check again that (one of) the files now exist:
+
+      if [ ! -f "${luks2_first_test_file}" ]; then
+        echo "ERROR: downloading and extracting ${luks2_tests} into ${luks2_tests_folder} did not complete successfully"
+        return 0
+      fi
+    fi
+
+    return 0 #which means this has been a success, we don't want to execute the remainder of this function
+  fi
+
   # create list of password and hashes of same type
   cmd_file=${OUTD}/${hash_type}.sh
 
@@ -258,6 +345,13 @@ function init()
   # create separate list of password and hashes
   sed 's/^echo *|.*$//'       "${cmd_file}" | awk '{print $2}'                                                                    > "${OUTD}/${hash_type}_passwords.txt"
   sed 's/^echo *|/echo "" |/' "${cmd_file}" | awk '{t="";for(i=10;i<=NF;i++){if(t){t=t" "$i}else{t=$i}};print t}' | cut -d"'" -f2 > "${OUTD}/${hash_type}_hashes.txt"
+
+  if is_in_array "${hash_type}" ${LUKS_MODES}; then
+    # 34100 LUKS2 dynamically generates filenames, we need to cat those to get the hashes
+    mv "${OUTD}/${hash_type}_hashes.txt" "${OUTD}/${hash_type}_hashes.tmp"
+    cat "${OUTD}/${hash_type}_hashes.tmp" | while read f; do cat $f; done > "${OUTD}/${hash_type}_hashes.txt"
+    rm "${OUTD}/${hash_type}_hashes.tmp"
+  fi
 
   if [ "${hash_type}" -eq 10300 ]; then
     #cat ${OUTD}/${hash_type}.sh | cut -d' ' -f11- | cut -d"'" -f2 > ${OUTD}/${hash_type}_hashes.txt
@@ -336,6 +430,7 @@ function init()
   done 9< "${OUTD}/${hash_type}_passwords.txt"
 
   min_len=0
+  fixed_len=0
 
   if   [ "${hash_type}" -eq  2500 ]; then
     min_len=7 # means length 8, since we start with 0
@@ -351,10 +446,21 @@ function init()
     min_len=7 # means length 8, since we start with 0
   elif [ "${hash_type}" -eq 22000 ]; then
     min_len=7 # means length 8, since we start with 0
+  elif [ "${hash_type}" -eq 33500 ]; then
+    fixed_len=5
+  elif [ "${hash_type}" -eq 33501 ]; then
+    min_len=5
+    fixed_len=9
+  elif [ "${hash_type}" -eq 33502 ]; then
+    min_len=5
+    fixed_len=13
   fi
 
   # generate multiple pass/hash foreach len (2 to 8)
   if [ "${MODE}" -ge 1 ]; then
+
+    # no multi hash checks for these modes (because we only have 1 hash for each of them)
+    ! has_multi_hash || return
 
     i=2
 
@@ -366,10 +472,24 @@ function init()
       rm -rf "${OUTD}/${hash_type}_dict1_multi_${i}" "${OUTD}/${hash_type}_dict2_multi_${i}"
       touch "${OUTD}/${hash_type}_dict1_multi_${i}" "${OUTD}/${hash_type}_dict2_multi_${i}"
 
-      perl tools/test.pl single "${hash_type}" ${i} > "${cmd_file}"
+      if [ "${fixed_len}" -ne 0 ]; then
+        if [ "${fixed_len}" -eq "${i}" ]; then
+          perl tools/test.pl single "${hash_type}" ${i} > "${cmd_file}"
+        else
+          perl tools/test.pl single "${hash_type}" ${fixed_len} > "${cmd_file}"
+        fi
+      else
+        perl tools/test.pl single "${hash_type}" ${i} > "${cmd_file}"
+      fi
 
       sed 's/^echo *|.*$//'       "${cmd_file}" | awk '{print $2}'                                                                    > "${OUTD}/${hash_type}_passwords_multi_${i}.txt"
       sed 's/^echo *|/echo "" |/' "${cmd_file}" | awk '{t="";for(i=10;i<=NF;i++){if(t){t=t" "$i}else{t=$i}};print t}' | cut -d"'" -f2 > "${OUTD}/${hash_type}_hashes_multi_${i}.txt"
+
+      if is_in_array "${hash_type}" ${LUKS_MODES}; then
+        mv "${OUTD}/${hash_type}_hashes_multi_${i}.txt" "${OUTD}/${hash_type}_hashes_multi_${i}.tmp"
+        cat  "${OUTD}/${hash_type}_hashes_multi_${i}.tmp" | while read f; do cat $f; done > "${OUTD}/${hash_type}_hashes_multi_${i}.txt"
+        rm  "${OUTD}/${hash_type}_hashes_multi_${i}.tmp"
+      fi
 
       if [ "${hash_type}" -eq 10300 ]; then
         #cat ${OUTD}/${hash_type}_multi_${i}.txt | cut -d' ' -f11- | cut -d"'" -f2 > ${OUTD}/${hash_type}_hashes_multi_${i}.txt
@@ -543,7 +663,7 @@ function attack_0()
         break
       fi
 
-      if [ "${file_only}" -eq 1 ]; then
+      if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
         temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
 
@@ -576,35 +696,49 @@ function attack_0()
       echo "${output}" >> "${OUTD}/logfull.txt"
 
       if [ "${ret}" -eq 0 ]; then
+        if ! (is_in_array "${hash_type}" ${LUKS_MODES}); then
+          if [ "${pass_only}" -eq 1 ]; then
+            search=":${pass}"
+          else
+            search="${hash}:${pass}"
+          fi
 
-        if [ "${pass_only}" -eq 1 ]; then
-          search=":${pass}"
-        else
-          search="${hash}:${pass}"
+          echo "${output}" | grep -F "${search}" &>/dev/null
+          newRet=$?
         fi
 
-        echo "${output}" | grep -F "${search}" &>/dev/null
-
-        newRet=$?
-
-        if [ "${newRet}" -eq 2 ]; then
-
+        if [[ "${newRet}" -eq 2 ]]; then
           # out-of-memory, workaround
 
-          echo "${output}" | grep -v "^Unsupported\|^$" | head -1 > tmp_file_out
+          if is_in_array "${hash_type}" ${LUKS_MODES}; then
+            search="$(cat ${hash} | tr -d '\n'):${pass}" #hash is a filename for 34100
+            echo "${output}" | grep -E '^\$luks\$' | head -1 > tmp_file_out #cracked hash from hashcat output
+          else
+            echo "${output}" | grep -v "^Unsupported\|^$" | head -1 > tmp_file_out #cracked hash from hashcat output
+          fi
+
           echo "${search}" > tmp_file_search
 
+          # echo -e "head tmp_file_out=\t$(cat tmp_file_out | head -c80)"
+          # echo -e "head tmp_file_search=\t$(cat tmp_file_search | head -c80)"
+          # echo -e "tail tmp_file_out=\t$(cat tmp_file_out | tail -c80)"
+          # echo -e "tail tmp_file_search=\t$(cat tmp_file_search | tail -c80)"
           out_md5=$(md5sum tmp_file_out | cut -d' ' -f1)
           search_md5=$(md5sum tmp_file_search | cut -d' ' -f1)
+          # echo -e "out_md5=\t$out_md5"
+          # echo -e "search_md5=\t$search_md5"
+          # echo ""
 
           rm tmp_file_out tmp_file_search
 
           if [ "${out_md5}" == "${search_md5}" ]; then
             newRet=0
+          else
+            newRet=10
           fi
         fi
 
-        if [ "${newRet}" -ne 0 ]; then
+        if [[ "${newRet}" -ne 0 ]]; then
           if [ "${newRet}" -eq 2 ]; then
             ret=20
           else
@@ -626,7 +760,7 @@ function attack_0()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -637,6 +771,9 @@ function attack_0()
 
   # multihash
   if [ "${MODE}" -ne 0 ]; then
+
+    # no multi hash checks for these modes (because we only have 1 hash for each of them)
+    ! has_multi_hash || return
 
     e_ce=0
     e_rs=0
@@ -651,7 +788,7 @@ function attack_0()
 
     # if file_only -> decode all base64 "hashes" and put them in the temporary file
 
-    if [ "${file_only}" -eq 1 ]; then
+    if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
       temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
       rm -f "${temp_file}"
@@ -686,15 +823,42 @@ function attack_0()
 
         pass=$(sed -n ${i}p "${OUTD}/${hash_type}_passwords.txt")
 
-        if [ "${pass_only}" -eq 1 ]; then
-          search=":${pass}"
-        else
-          search="${hash}:${pass}"
+        if is_in_array "${hash_type}" ${LUKS_MODES}; then
+          if [ "${pass_only}" -eq 1 ]; then
+            search=":${pass}"
+          else
+            search="${hash}:${pass}"
+          fi
+
+          echo "${output}" | grep -F "${search}" &>/dev/null
+
+          newRet=$?
         fi
 
-        echo "${output}" | grep -F "${search}" &>/dev/null
+        if is_in_array "${hash_type}" ${LUKS_MODES}; then
+          search="$(echo ${hash} | tr -d '\n'):${pass}" #hash is read from file already
+          to_search_in_out="$(echo ${hash} | head -c 200)"
+          echo "${output}" | grep -F "$to_search_in_out" | head -1 > tmp_file_out #cracked hash from hashcat output
+          echo "${search}" > tmp_file_search
 
-        newRet=$?
+          # echo -e "head tmp_file_out=\t$(cat tmp_file_out | head -c80)"
+          # echo -e "head tmp_file_search=\t$(cat tmp_file_search | head -c80)"
+          # echo -e "tail tmp_file_out=\t$(cat tmp_file_out | tail -c80)"
+          # echo -e "tail tmp_file_search=\t$(cat tmp_file_search | tail -c80)"
+          out_md5=$(md5sum tmp_file_out | cut -d' ' -f1)
+          search_md5=$(md5sum tmp_file_search | cut -d' ' -f1)
+          # echo -e "out_md5=\t$out_md5"
+          # echo -e "search_md5=\t$search_md5"
+          # echo ""
+
+          rm tmp_file_out tmp_file_search
+
+          if [ "${out_md5}" == "${search_md5}" ]; then
+            newRet=0
+          else
+            newRet=10
+          fi
+        fi
 
         if [ "${newRet}" -ne 0 ]; then
           if [ "${newRet}" -eq 2 ]; then
@@ -720,7 +884,7 @@ function attack_0()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -768,12 +932,13 @@ function attack_1()
     fi
 
     echo "> Testing hash type $hash_type with attack mode 1, markov ${MARKOV}, single hash, Device-Type ${DEVICE_TYPE}, Kernel-Type ${KERNEL_TYPE}, Vector-Width ${VECTOR}." >> "${OUTD}/logfull.txt" 2>> "${OUTD}/logfull.txt"
+
     i=1
     while read -r -u 9 hash; do
 
       if [ $i -gt ${min} ]; then
 
-        if [ "${file_only}" -eq 1 ]; then
+        if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
           temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
 
@@ -913,7 +1078,7 @@ function attack_1()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -926,16 +1091,7 @@ function attack_1()
   if [ "${MODE}" -ne 0 ]; then
 
     # no multi hash checks for these modes (because we only have 1 hash for each of them)
-
-    if   [ "${hash_type}" -eq 14000 ]; then
-      return
-    elif [ "${hash_type}" -eq 14100 ]; then
-      return
-    elif [ "${hash_type}" -eq 14900 ]; then
-      return
-    elif [ "${hash_type}" -eq 15400 ]; then
-      return
-    fi
+    ! has_multi_hash || return
 
     e_ce=0
     e_rs=0
@@ -958,7 +1114,7 @@ function attack_1()
 
     # if file_only -> decode all base64 "hashes" and put them in the temporary file
 
-    if [ "${file_only}" -eq 1 ]; then
+    if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
       temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
       rm -f "${temp_file}"
@@ -1035,7 +1191,7 @@ function attack_1()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -1095,7 +1251,7 @@ function attack_3()
         fi
       fi
 
-      if [ "${file_only}" -eq 1 ]; then
+      if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
         temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
 
@@ -1166,10 +1322,19 @@ function attack_3()
 
         line_dict=$(sed -n ${i}p "${dict}")
 
-        if [ "${pass_only}" -eq 1 ]; then
-          search=":${line_dict}"
+
+        if is_in_array "${hash_type}" ${LUKS_MODES}; then
+          if [ "${pass_only}" -eq 1 ]; then
+            search=":${line_dict}"
+          else
+            search="$(cat ${hash} | tr -d '\n'):${line_dict}" #hash is a filename for 34100
+          fi
         else
-          search="${hash}:${line_dict}"
+          if [ "${pass_only}" -eq 1 ]; then
+            search=":${line_dict}"
+          else
+            search="${hash}:${line_dict}"
+          fi
         fi
 
         echo "${output}" | grep -F "${search}" &>/dev/null
@@ -1217,7 +1382,7 @@ function attack_3()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -1230,16 +1395,7 @@ function attack_3()
   if [ "${MODE}" -ne 0 ]; then
 
     # no multi hash checks for these modes (because we only have 1 hash for each of them)
-
-    if   [ "${hash_type}" -eq 14000 ]; then
-      return
-    elif [ "${hash_type}" -eq 14100 ]; then
-      return
-    elif [ "${hash_type}" -eq 14900 ]; then
-      return
-    elif [ "${hash_type}" -eq 15400 ]; then
-      return
-    fi
+    ! has_multi_hash || return
 
     e_ce=0
     e_rs=0
@@ -1273,7 +1429,7 @@ function attack_3()
 
     # if file_only -> decode all base64 "hashes" and put them in the temporary file
 
-    if [ "${file_only}" -eq 1 ]; then
+    if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
       temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
       rm -f "${temp_file}"
@@ -1640,7 +1796,7 @@ function attack_3()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -1738,7 +1894,7 @@ function attack_6()
 
       if [ ${i} -gt ${min} ]; then
 
-        if [ "${file_only}" -eq 1 ]; then
+        if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
           temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
 
@@ -1881,7 +2037,7 @@ function attack_6()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -1897,16 +2053,7 @@ function attack_6()
   if [ "${MODE}" -ne 0 ]; then
 
     # no multi hash checks for these modes (because we only have 1 hash for each of them)
-
-    if   [ "${hash_type}" -eq 14000 ]; then
-      return
-    elif [ "${hash_type}" -eq 14100 ]; then
-      return
-    elif [ "${hash_type}" -eq 14900 ]; then
-      return
-    elif [ "${hash_type}" -eq 15400 ]; then
-      return
-    fi
+    ! has_multi_hash || return
 
     e_ce=0
     e_rs=0
@@ -1915,6 +2062,7 @@ function attack_6()
     e_nm=0
     cnt=0
 
+    min=1
     max=9
 
     if   [ "${hash_type}" -eq  2500 ]; then
@@ -1929,6 +2077,12 @@ function attack_6()
       max=5
     elif [ "${hash_type}" -eq 22000 ]; then
       max=5
+    elif [ "${hash_type}" -eq 33500 ]; then
+      min=5
+    elif [ "${hash_type}" -eq 33501 ]; then
+      min=8
+    elif [ "${hash_type}" -eq 33502 ]; then
+      min=8
     fi
 
     if is_in_array "${hash_type}" ${TIMEOUT_ALGOS}; then
@@ -1941,11 +2095,16 @@ function attack_6()
     i=2
     while [ "$i" -lt "$max" ]; do
 
+      if [ "$i" -lt "$min" ]; then
+        i=$((i + 1))
+        continue
+      fi
+
       hash_file=${OUTD}/${hash_type}_hashes_multi_${i}.txt
 
       # if file_only -> decode all base64 "hashes" and put them in the temporary file
 
-      if [ "${file_only}" -eq 1 ]; then
+      if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
         temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
         rm -f "${temp_file}"
@@ -2021,7 +2180,7 @@ function attack_6()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -2116,7 +2275,7 @@ function attack_7()
 
       if [ ${i} -gt ${min} ]; then
 
-        if [ "${file_only}" -eq 1 ]; then
+        if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
           temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
 
@@ -2312,7 +2471,7 @@ function attack_7()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -2328,16 +2487,7 @@ function attack_7()
   if [ "${MODE}" -ne 0 ]; then
 
     # no multi hash checks for these modes (because we only have 1 hash for each of them)
-
-    if   [ "${hash_type}" -eq 14000 ]; then
-      return
-    elif [ "${hash_type}" -eq 14100 ]; then
-      return
-    elif [ "${hash_type}" -eq 14900 ]; then
-      return
-    elif [ "${hash_type}" -eq 15400 ]; then
-      return
-    fi
+    ! has_multi_hash || return
 
     e_ce=0
     e_rs=0
@@ -2368,6 +2518,12 @@ function attack_7()
       max=5
     elif [ "${hash_type}" -eq 22000 ]; then
       max=5
+    elif [ "${hash_type}" -eq 33500 ]; then
+      min=5
+    elif [ "${hash_type}" -eq 33501 ]; then
+      max=3
+    elif [ "${hash_type}" -eq 33502 ]; then
+      max=3
     fi
 
     if is_in_array "${hash_type}" ${TIMEOUT_ALGOS}; then
@@ -2383,11 +2539,17 @@ function attack_7()
       hash_file=${OUTD}/${hash_type}_hashes_multi_${i}.txt
       dict_file=${OUTD}/${hash_type}_dict2_multi_${i}
 
-      mask=${mask_7[$i]}
+      if [ "${hash_type}" -eq 40001 ]; then
+        mask=${mask_7[((i+10))]}
+      elif [ "${hash_type}" -eq 40002 ]; then
+        mask=${mask_7[((i+10))]}
+      else
+        mask=${mask_7[$i]}
+      fi
 
       # if file_only -> decode all base64 "hashes" and put them in the temporary file
 
-      if [ "${file_only}" -eq 1 ]; then
+      if [ "${file_only}" -eq 1 ] && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
 
         temp_file="${OUTD}/${hash_type}_filebased_only_temp.txt"
         rm -f "${temp_file}"
@@ -2487,7 +2649,7 @@ function attack_7()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -2670,7 +2832,7 @@ function cryptoloop_test()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -3048,7 +3210,7 @@ function truecrypt_test()
       msg="Compare Error"
     elif [ "${e_rs}" -ne 0 ]; then
       msg="Skip"
-    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+    elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
       msg="Error"
     elif [ "${e_to}" -ne 0 ]; then
       msg="Warning"
@@ -3149,7 +3311,7 @@ function veracrypt_test()
     msg="Compare Error"
   elif [ "${e_rs}" -ne 0 ]; then
     msg="Skip"
-  elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+  elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
     msg="Error"
   elif [ "${e_to}" -ne 0 ]; then
     msg="Warning"
@@ -3350,7 +3512,7 @@ function luks_test()
           msg="Compare Error"
         elif [ "${e_rs}" -ne 0 ]; then
           msg="Skip"
-        elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+        elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
           msg="Error"
         elif [ "${e_to}" -ne 0 ]; then
           msg="Warning"
@@ -3496,7 +3658,7 @@ function luks_legacy_test()
               msg="Compare Error"
             elif [ "${e_rs}" -ne 0 ]; then
               msg="Skip"
-            elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ]; then
+            elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
               msg="Error"
             elif [ "${e_to}" -ne 0 ]; then
               msg="Warning"
@@ -3511,6 +3673,119 @@ function luks_legacy_test()
     done
   done
 }
+
+
+
+function luks2_test()
+{
+  local LUKS2_PASSWORD=$(cat "${TDIR}/luks2_tests/pw" 2>/dev/null)
+
+  hashType=$1
+  attackType=$2
+
+  # if -m all was set let us default to -a 3 only. You could specify the attack type directly, e.g. -m 0
+  # the problem with defaulting to all=0,1,3,6,7 is that it could take way too long
+
+  if [ "${attackType}" -eq 65535 ]; then
+    attackType=3
+  fi
+
+  chmod u+x "${TDIR}/luks2hashcat.py"
+
+  for luks2File in $(ls ${TDIR}/luks2_tests | grep "img$"); do
+    luksMainMask="?l"
+    luksMask="${luksMainMask}"
+
+    # for combination or hybrid attacks
+    luksPassPartFile1="${OUTD}/${hashType}_dict1"
+    luksPassPartFile2="${OUTD}/${hashType}_dict2"
+
+    luksContainer="${TDIR}/luks2_tests/${luks2File}"
+
+    mkdir -p "${OUTD}/luks2_tests"
+    luksHashFile="${OUTD}/luks2_tests/${luks2File}.hash"
+
+    case $attackType in
+      0)
+        CMD="./${BIN} ${OPTS} -a 0 -m ${hashType} '${luksHashFile}' '${TDIR}/luks2_tests/pw'"
+        ;;
+      1)
+        luksPassPart1Len=$((${#LUKS2_PASSWORD} / 2))
+        luksPassPart2Start=$((luksPassPart1Len + 1))
+
+        echo "${LUKS2_PASSWORD}" | cut -c-${luksPassPart1Len} > "${luksPassPartFile1}" 2>/dev/null
+        echo "${LUKS2_PASSWORD}" | cut -c${luksPassPart2Start}- > "${luksPassPartFile2}" 2>/dev/null
+
+        CMD="./${BIN} ${OPTS} -a 6 -m ${hashType} '${luksHashFile}' ${luksPassPartFile1} ${luksPassPartFile2}"
+        ;;
+      3)
+        luksMaskFixedLen=$((${#LUKS2_PASSWORD} - 1))
+
+        luksMask="$(echo "${LUKS2_PASSWORD}" | cut -c-${luksMaskFixedLen} 2>/dev/null)"
+        luksMask="${luksMask}${luksMainMask}"
+
+        CMD="./${BIN} ${OPTS} -a 3 -m ${hashType} '${luksHashFile}' ${luksMask}"
+        ;;
+      6)
+        luksPassPart1Len=$((${#LUKS2_PASSWORD} - 1))
+
+        echo "${LUKS2_PASSWORD}" | cut -c-${luksPassPart1Len} > "${luksPassPartFile1}" 2>/dev/null
+
+        CMD="./${BIN} ${OPTS} -a 6 -m ${hashType} '${luksHashFile}' ${luksPassPartFile1} ${luksMask}"
+        ;;
+      7)
+        echo "${LUKS2_PASSWORD}" | cut -c2- > "${luksPassPartFile1}" 2>/dev/null
+
+        CMD="./${BIN} ${OPTS} -a 7 -m ${hashType} '${luksHashFile}' ${luksMask} ${luksPassPartFile1}"
+        ;;
+    esac
+
+    eval \"${TDIR}/luks2hashcat.py\" \"${luksContainer}\" > "${luksHashFile}"
+
+    luksMode="$(basename "$luksContainer" .img)"
+
+    if [ -n "${CMD}" ] && [ ${#CMD} -gt 5 ]; then
+      echo "> Testing hash type ${hashType} with attack mode ${attackType}, markov ${MARKOV}, single hash, Device-Type ${DEVICE_TYPE}, Kernel-Type ${KERNEL_TYPE}, Vector-Width ${VECTOR}, LUKS2-mode ${luksMode}" >> "${OUTD}/logfull.txt" 2>> "${OUTD}/logfull.txt"
+
+      if [ -f "${luks2_first_test_file}" ]; then
+        output=$(eval ${CMD} 2>&1)
+        ret=${?}
+
+        echo "${output}" >> "${OUTD}/logfull.txt"
+      else
+        ret=30
+      fi
+
+      e_ce=0
+      e_rs=0
+      e_to=0
+      e_nf=0
+      e_nm=0
+      cnt=0
+
+      status ${ret}
+
+      cnt=1
+
+      msg="OK"
+
+      if [ "${e_ce}" -ne 0 ]; then
+        msg="Compare Error"
+      elif [ "${e_rs}" -ne 0 ]; then
+        msg="Skip"
+      elif [ "${e_nf}" -ne 0 ] || [ "${e_nm}" -ne 0 ] || [ "${cnt}" -eq 0 ]; then
+        msg="Error"
+      elif [ "${e_to}" -ne 0 ]; then
+        msg="Warning"
+      fi
+
+      echo "[ ${OUTD} ] [ Type ${hash_type}, Attack ${attackType}, Mode single, Device-Type ${DEVICE_TYPE}, Kernel-Type ${KERNEL_TYPE}, Vector-Width ${VECTOR}, LUKS2-mode ${luksMode} ] > $msg : ${e_nf}/${cnt} not found, ${e_nm}/${cnt} not matched, ${e_to}/${cnt} timeout, ${e_rs}/${cnt} skipped"
+
+      status ${ret}
+    fi
+  done
+}
+
 
 function usage()
 {
@@ -3578,6 +3853,8 @@ OPTIONS:
   -I    Use this folder as input/output folder for packaged tests
         (string)    => path to folder
 
+  -g    Generate crypto-containers on-the-fly (requires sudo)
+
   -h    Show this help
 
 EOF
@@ -3595,8 +3872,9 @@ VECTOR="default"
 HT=0
 PACKAGE=0
 OPTIMIZED=1
+GENERATE_CONTAINERS=0
 
-while getopts "V:t:m:a:b:hcpd:x:o:d:D:F:POI:s:fr:" opt; do
+while getopts "V:t:m:a:b:hcpd:x:o:d:D:F:POI:s:fr:g" opt; do
 
   case ${opt} in
     "V")
@@ -3732,6 +4010,10 @@ while getopts "V:t:m:a:b:hcpd:x:o:d:D:F:POI:s:fr:" opt; do
       RUNTIME=${OPTARG}
       ;;
 
+    "g")
+      GENERATE_CONTAINERS=1
+      ;;
+
     \?)
       usage
       ;;
@@ -3844,6 +4126,15 @@ if [ "${PACKAGE}" -eq 0 ] || [ -z "${PACKAGE_FOLDER}" ]; then
     fi
   fi
 
+
+  if [[ "${GENERATE_CONTAINERS}" -eq 1 ]]; then
+    if sudo -n true 2>/dev/null; then
+      true
+    else
+      echo "We'll need sudo to generate crypto-containers on-the-fly"
+    fi
+  fi
+
   if [ -z "${PACKAGE_FOLDER}" ]; then
 
     # make new dir
@@ -3852,15 +4143,19 @@ if [ "${PACKAGE}" -eq 0 ] || [ -z "${PACKAGE_FOLDER}" ]; then
     # generate random test entry
     if [ "${HT}" -eq 65535 ]; then
       for TMP_HT in ${HASH_TYPES}; do
-        if ! is_in_array "${TMP_HT}" ${LUKS_MODES}; then
-          if ! is_in_array "${TMP_HT}" ${TC_MODES}; then
-            if ! is_in_array "${TMP_HT}" ${VC_MODES}; then
-              if ! is_in_array "${TMP_HT}" ${CL_MODES}; then
-                perl tools/test.pl single "${TMP_HT}" >> "${OUTD}/all.sh"
+
+        if ! ( is_in_array "${TMP_HT}" ${LUKS1_ALL_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ); then
+          if ! ( is_in_array "${TMP_HT}" ${LUKS2_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ); then
+            if ! is_in_array "${TMP_HT}" ${TC_MODES}; then
+              if ! is_in_array "${TMP_HT}" ${VC_MODES}; then
+                if ! is_in_array "${TMP_HT}" ${CL_MODES}; then
+                  perl tools/test.pl single "${TMP_HT}" >> "${OUTD}/all.sh"
+                fi
               fi
             fi
           fi
         fi
+
       done
     else
       for TMP_HT in $(seq "${HT_MIN}" "${HT_MAX}"); do
@@ -3868,12 +4163,13 @@ if [ "${PACKAGE}" -eq 0 ] || [ -z "${PACKAGE_FOLDER}" ]; then
           continue
         fi
 
-        if ! is_in_array "${TMP_HT}" ${LUKS_MODES}; then
-          # Exclude TrueCrypt and VeraCrypt testing modes
-          if ! is_in_array "${TMP_HT}" ${TC_MODES}; then
-            if ! is_in_array "${TMP_HT}" ${VC_MODES}; then
-              if ! is_in_array "${TMP_HT}" ${CL_MODES}; then
-                perl tools/test.pl single "${TMP_HT}" >> "${OUTD}/all.sh"
+        if ! ( is_in_array "${TMP_HT}" ${LUKS1_ALL_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ); then
+          if ! ( is_in_array "${TMP_HT}" ${LUKS2_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ); then
+            if ! is_in_array "${TMP_HT}" ${TC_MODES}; then
+              if ! is_in_array "${TMP_HT}" ${VC_MODES}; then
+                if ! is_in_array "${TMP_HT}" ${CL_MODES}; then
+                  perl tools/test.pl single "${TMP_HT}" >> "${OUTD}/all.sh"
+                fi
               fi
             fi
           fi
@@ -4002,6 +4298,7 @@ if [ "${PACKAGE}" -eq 0 ] || [ -z "${PACKAGE_FOLDER}" ]; then
           VECTOR=${CUR_WIDTH}
           OPTS="${OPTS_OLD} --backend-vector-width ${VECTOR}"
 
+          # Slow hashes only have a single kernel to test, so we only test with a0
           if [ ${IS_SLOW} -eq 1 ]; then
 
             # Look up if this is one of supported VeraCrypt modes
@@ -4018,7 +4315,7 @@ if [ "${PACKAGE}" -eq 0 ] || [ -z "${PACKAGE_FOLDER}" ]; then
               truecrypt_test "${hash_type}" 0
               truecrypt_test "${hash_type}" 1
               truecrypt_test "${hash_type}" 2
-            elif is_in_array "${hash_type}" ${LUKS_MODES}; then
+            elif is_in_array "${hash_type}" ${LUKS1_ALL_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ; then
               # run luks tests
               if [ ${hash_type} -eq 14600 ]; then
                 # for legacy mode
@@ -4027,6 +4324,9 @@ if [ "${PACKAGE}" -eq 0 ] || [ -z "${PACKAGE_FOLDER}" ]; then
                 # for new modes
                 luks_test "${hash_type}" ${ATTACK}
               fi
+            elif is_in_array "${hash_type}" ${LUKS2_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
+              # run luks2 tests
+              luks2_test "${hash_type}" ${ATTACK}
             else
               # run attack mode 0 (stdin)
               if [ ${ATTACK} -eq 65535 ] || [ ${ATTACK} -eq 0 ]; then attack_0; fi
@@ -4085,19 +4385,23 @@ if [ "${PACKAGE}" -eq 1 ]; then
   cp "${BASH_SOURCE[0]}" "${OUTD}/test.sh"
 
   copy_luks_dir=0
+  copy_luks2_dir=0
   copy_tc_dir=0
   copy_vc_dir=0
   copy_cl_dir=0
 
   if [ "${HT}" -eq 65535 ]; then
     copy_luks_dir=1
+    copy_luks2_dir=1
     copy_tc_dir=1
     copy_vc_dir=1
     copy_cl_dir=1
   else
     for TMP_HT in $(seq "${HT_MIN}" "${HT_MAX}"); do
-      if is_in_array "${TMP_HT}" "${LUKS_MODES}"; then
+      if is_in_array "${TMP_HT}" ${LUKS1_ALL_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]] ; then
         copy_luks_dir=1
+      elif is_in_array "${TMP_HT}" ${LUKS2_MODES} && [[ "${GENERATE_CONTAINERS}" -eq 0 ]]; then
+        copy_luks2_dir=1
       elif is_in_array "${TMP_HT}" ${TC_MODES}; then
         copy_tc_dir=1
       elif is_in_array "${TMP_HT}" ${VC_MODES}; then
@@ -4111,6 +4415,11 @@ if [ "${PACKAGE}" -eq 1 ]; then
   if [ "${copy_luks_dir}" -eq 1 ]; then
     mkdir "${OUTD}/luks_tests/"
     cp ${TDIR}/luks_tests/* "${OUTD}/luks_tests/"
+  fi
+
+  if [ "${copy_luks2_dir}" -eq 1 ]; then
+    mkdir "${OUTD}/luks2_tests/"
+    cp ${TDIR}/luks2_tests/* "${OUTD}/luks2_tests/"
   fi
 
   if [ "${copy_tc_dir}" -eq 1 ]; then

@@ -87,7 +87,6 @@ char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAY
   return jit_build_options;
 }
 
-
 u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
   const u64 tmp_size = (const u64) sizeof (omt_sha256_tmp_t);
@@ -177,7 +176,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   base64_encode (int_to_base64, (const u8 *) digest_buf, 32, (u8 *) ptr_plain);
 
-  const int out_len = snprintf (line_buf, line_size, "otm_sha256:%d:%s:%s", salt->salt_iter + 1, (char *) salt->salt_buf, (char *) ptr_plain);
+  const int out_len = snprintf (line_buf, line_size, "otm_sha256:%d:%s:%s", salt->salt_iter + 1, (const char *) salt->salt_buf, (const char *) ptr_plain);
 
   return out_len;
 }
@@ -193,6 +192,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

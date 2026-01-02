@@ -53,7 +53,7 @@ typedef struct dpapimk
   u32 SID_offset;
 
   /* here only for possible
-     forward compatibiliy
+     forward compatibility
   */
   // u8 cipher_algo[16];
   // u8 hash_algo[16];
@@ -79,10 +79,16 @@ static const char *SIGNATURE_DPAPIMK = "$DPAPImk$";
 
 bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
-  // AMD Radeon Pro W5700X, Metal.Version.: 261.13, compiler hangs
-  if (device_param->is_metal == true)
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_APPLE) && (device_param->opencl_device_type & CL_DEVICE_TYPE_GPU))
   {
-    return true;
+    if (device_param->is_metal == true)
+    {
+      if (strncmp (device_param->device_name, "Intel", 5) == 0)
+      {
+        // Intel Iris Graphics, Metal Version 244.303: failed to create 'm15900_init' pipeline, timeout reached
+        return true;
+      }
+    }
   }
 
   return false;
@@ -100,13 +106,6 @@ u64 module_esalt_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED
   const u64 esalt_size = (const u64) sizeof (dpapimk_t);
 
   return esalt_size;
-}
-
-u32 module_pw_max (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
-{
-  const u32 pw_max = PW_MAX;
-
-  return pw_max;
 }
 
 int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED void *digest_buf, MAYBE_UNUSED salt_t *salt, MAYBE_UNUSED void *esalt_buf, MAYBE_UNUSED void *hook_salt_buf, MAYBE_UNUSED hashinfo_t *hash_info, const char *line_buf, MAYBE_UNUSED const int line_len)
@@ -228,7 +227,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   for (u32 i = 0; i < dpapimk->contents_len / 8; i++)
   {
-    dpapimk->contents[i] = hex_to_u32 ((const u8 *) &contents_pos[i * 8]);
+    dpapimk->contents[i] = hex_to_u32 (&contents_pos[i * 8]);
 
     dpapimk->contents[i] = byte_swap_32 (dpapimk->contents[i]);
   }
@@ -259,10 +258,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   // iv
 
-  dpapimk->iv[0] = hex_to_u32 ((const u8 *) &iv_pos[ 0]);
-  dpapimk->iv[1] = hex_to_u32 ((const u8 *) &iv_pos[ 8]);
-  dpapimk->iv[2] = hex_to_u32 ((const u8 *) &iv_pos[16]);
-  dpapimk->iv[3] = hex_to_u32 ((const u8 *) &iv_pos[24]);
+  dpapimk->iv[0] = hex_to_u32 (&iv_pos[ 0]);
+  dpapimk->iv[1] = hex_to_u32 (&iv_pos[ 8]);
+  dpapimk->iv[2] = hex_to_u32 (&iv_pos[16]);
+  dpapimk->iv[3] = hex_to_u32 (&iv_pos[24]);
 
   dpapimk->iv[0] = byte_swap_32 (dpapimk->iv[0]);
   dpapimk->iv[1] = byte_swap_32 (dpapimk->iv[1]);
@@ -304,9 +303,9 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   u8 SID[512]            = { 0 };
   u8* SID_tmp;
 
-  u32 *ptr_SID      = (u32 *) dpapimk->SID;
-  u32 *ptr_iv       = (u32 *) dpapimk->iv;
-  u32 *ptr_contents = (u32 *) dpapimk->contents;
+  const u32 *ptr_SID      = (const u32 *) dpapimk->SID;
+  const u32 *ptr_iv       = (const u32 *) dpapimk->iv;
+  const u32 *ptr_contents = (const u32 *) dpapimk->contents;
 
   u32 u32_iv[4];
   u8 iv[32 + 1];
@@ -392,6 +391,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -448,7 +449,7 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_potfile_disable          = MODULE_DEFAULT;
   module_ctx->module_potfile_keep_all_hashes  = MODULE_DEFAULT;
   module_ctx->module_pwdump_column            = MODULE_DEFAULT;
-  module_ctx->module_pw_max                   = module_pw_max;
+  module_ctx->module_pw_max                   = MODULE_DEFAULT;
   module_ctx->module_pw_min                   = MODULE_DEFAULT;
   module_ctx->module_salt_max                 = MODULE_DEFAULT;
   module_ctx->module_salt_min                 = MODULE_DEFAULT;

@@ -8,7 +8,8 @@
 use strict;
 use warnings;
 
-use Crypt::GCrypt;
+use Crypt::Blowfish;
+use Crypt::Mode::CFB;
 use Crypt::PBKDF2;
 use Digest::SHA qw (sha1 sha1_hex);
 
@@ -36,20 +37,9 @@ sub module_generate_hash
   my $pass_hash = sha1 ($word);
   my $key       = $kdf->PBKDF2 ($b_salt, $pass_hash);
 
-  my $cfb = Crypt::GCrypt->new
-  (
-    type      => 'cipher',
-    algorithm => 'blowfish',
-    mode      => 'cfb'
-  );
+  my $cfb = Crypt::Mode::CFB->new('Blowfish');
 
-  $cfb->start  ('encrypting');
-  $cfb->setkey ($key);
-  $cfb->setiv  ($b_iv);
-
-  my $b_cipher = $cfb->encrypt ($b_plain);
-
-  $cfb->finish ();
+  my $b_cipher = $cfb->encrypt($b_plain, $key, $b_iv);
 
   my $cipher   = unpack ('H*', $b_cipher);
   my $checksum = sha1_hex ($b_plain);
@@ -113,19 +103,9 @@ sub module_verify_hash
   my $pass_hash = sha1 ($word);
   my $key       = $kdf->PBKDF2 ($b_salt, $pass_hash);
 
-  my $cfb = Crypt::GCrypt->new (
-    type      => 'cipher',
-    algorithm => 'blowfish',
-    mode      => 'cfb'
-  );
+  my $cfb = Crypt::Mode::CFB->new('Blowfish');
 
-  $cfb->start  ('decrypting');
-  $cfb->setkey ($key);
-  $cfb->setiv  ($b_iv);
-
-  my $b_plain = $cfb->decrypt ($b_cipher);
-
-  $cfb->finish ();
+  my $b_plain = $cfb->decrypt($b_cipher, $key, $b_iv);
 
   my $plain = unpack ('H*', $b_plain);
 

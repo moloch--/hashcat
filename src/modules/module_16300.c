@@ -20,6 +20,7 @@ static const u32   HASH_CATEGORY  = HASH_CATEGORY_CRYPTOCURRENCY_WALLET;
 static const char *HASH_NAME      = "Ethereum Pre-Sale Wallet, PBKDF2-HMAC-SHA256";
 static const u64   KERN_TYPE      = 16300;
 static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
+                                  | OPTI_TYPE_REGISTER_LIMIT
                                   | OPTI_TYPE_SLOW_HASH_SIMD_LOOP;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_PT_GENERATE_LE
@@ -63,17 +64,6 @@ typedef struct pbkdf2_sha256_tmp
 
 static const char *SIGNATURE_ETHEREUM_PRESALE = "$ethereum$w";
 static const int   ROUNDS_ETHEREUM_PRESALE    = 2000;
-
-bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
-{
-  // AMD Radeon Pro W5700X, Metal.Version.: 261.13, compiler hangs
-  if (device_param->is_metal == true)
-  {
-    return true;
-  }
-
-  return false;
-}
 
 char *module_jit_build_options (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hashes_t *hashes, MAYBE_UNUSED const hc_device_param_t *device_param)
 {
@@ -165,10 +155,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   const u8 *encseed_pos = token.buf[1];
   const int encseed_len = token.len[1];
 
-  ethereum_presale->iv[0] = hex_to_u32 ((const u8 *) &encseed_pos[ 0]);
-  ethereum_presale->iv[1] = hex_to_u32 ((const u8 *) &encseed_pos[ 8]);
-  ethereum_presale->iv[2] = hex_to_u32 ((const u8 *) &encseed_pos[16]);
-  ethereum_presale->iv[3] = hex_to_u32 ((const u8 *) &encseed_pos[24]);
+  ethereum_presale->iv[0] = hex_to_u32 (&encseed_pos[ 0]);
+  ethereum_presale->iv[1] = hex_to_u32 (&encseed_pos[ 8]);
+  ethereum_presale->iv[2] = hex_to_u32 (&encseed_pos[16]);
+  ethereum_presale->iv[3] = hex_to_u32 (&encseed_pos[24]);
 
   ethereum_presale->iv[0] = byte_swap_32 (ethereum_presale->iv[0]);
   ethereum_presale->iv[1] = byte_swap_32 (ethereum_presale->iv[1]);
@@ -179,7 +169,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   for (int i = 32, j = 0; i < encseed_len; i += 8, j++)
   {
-    esalt_buf_ptr[j] = hex_to_u32 ((const u8 *) &encseed_pos[i]);
+    esalt_buf_ptr[j] = hex_to_u32 (&encseed_pos[i]);
 
     esalt_buf_ptr[j] = byte_swap_32 (esalt_buf_ptr[j]);
   }
@@ -201,10 +191,10 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *bkp_pos = token.buf[3];
 
-  digest[0] = hex_to_u32 ((const u8 *) &bkp_pos[ 0]);
-  digest[1] = hex_to_u32 ((const u8 *) &bkp_pos[ 8]);
-  digest[2] = hex_to_u32 ((const u8 *) &bkp_pos[16]);
-  digest[3] = hex_to_u32 ((const u8 *) &bkp_pos[24]);
+  digest[0] = hex_to_u32 (&bkp_pos[ 0]);
+  digest[1] = hex_to_u32 (&bkp_pos[ 8]);
+  digest[2] = hex_to_u32 (&bkp_pos[16]);
+  digest[3] = hex_to_u32 (&bkp_pos[24]);
 
   return (PARSER_OK);
 }
@@ -284,6 +274,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -349,6 +341,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = module_tmp_size;
-  module_ctx->module_unstable_warning         = module_unstable_warning;
+  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }

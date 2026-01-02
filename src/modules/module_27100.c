@@ -28,7 +28,6 @@ static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_PT_ADDBITS14
                                   | OPTS_TYPE_PT_UTF16LE
                                   | OPTS_TYPE_ST_HEX
-                                  | OPTS_TYPE_MAXIMUM_THREADS
                                   | OPTS_TYPE_AUTODETECT_DISABLE;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
 static const char *ST_PASS        = "b4b9b02e6f09a9bd760f388b67351e2b";
@@ -212,7 +211,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
   digest[3] = hex_to_u32 (hash_pos + 24);
 
   /**
-   * reuse challange data as salt_buf, its the buffer that is most likely unique
+   * reuse challenge data as salt_buf, its the buffer that is most likely unique
    */
 
   salt->salt_buf[0] = 0;
@@ -265,9 +264,9 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   int out_len = 0;
 
-  u8 *ptr;
+  const u8 *ptr;
 
-  ptr = (u8 *) netntlm->userdomain_buf;
+  ptr = (const u8 *) netntlm->userdomain_buf;
 
   for (int i = 0; i < netntlm->user_len; i += 2)
   {
@@ -286,7 +285,7 @@ int module_hash_encode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   out_buf[out_len++] = ':';
 
-  ptr = (u8 *) netntlm->chall_buf;
+  ptr = (const u8 *) netntlm->chall_buf;
 
   for (int i = 0; i < netntlm->srvchall_len; i++)
   {
@@ -343,6 +342,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = module_benchmark_mask;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

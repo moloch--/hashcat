@@ -24,6 +24,7 @@ static const u32   OPTI_TYPE      = OPTI_TYPE_ZERO_BYTE
                                   | OPTI_TYPE_NOT_ITERATED;
 static const u64   OPTS_TYPE      = OPTS_TYPE_STOCK_MODULE
                                   | OPTS_TYPE_PT_GENERATE_BE
+                                  | OPTS_TYPE_NATIVE_THREADS
                                   | OPTS_TYPE_ST_ADD80
                                   | OPTS_TYPE_ST_UPPER;
 static const u32   SALT_TYPE      = SALT_TYPE_EMBEDDED;
@@ -109,11 +110,11 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   const u8 *hash_pos = token.buf[1];
 
-  digest[0] = hex_to_u32 ((const u8 *) &hash_pos[ 0]);
-  digest[1] = hex_to_u32 ((const u8 *) &hash_pos[ 8]);
-  digest[2] = hex_to_u32 ((const u8 *) &hash_pos[16]);
-  digest[3] = hex_to_u32 ((const u8 *) &hash_pos[24]);
-  digest[4] = hex_to_u32 ((const u8 *) &hash_pos[32]);
+  digest[0] = hex_to_u32 (&hash_pos[ 0]);
+  digest[1] = hex_to_u32 (&hash_pos[ 8]);
+  digest[2] = hex_to_u32 (&hash_pos[16]);
+  digest[3] = hex_to_u32 (&hash_pos[24]);
+  digest[4] = hex_to_u32 (&hash_pos[32]);
 
   digest[0] = byte_swap_32 (digest[0]);
   digest[1] = byte_swap_32 (digest[1]);
@@ -156,6 +157,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;

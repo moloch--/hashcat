@@ -54,6 +54,22 @@ typedef struct qnx_sha512_tmp
 
 static const int ROUNDS_QNX = 1000;
 
+bool module_unstable_warning (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra, MAYBE_UNUSED const hc_device_param_t *device_param)
+{
+  if ((device_param->opencl_platform_vendor_id == VENDOR_ID_INTEL_SDK) && (device_param->opencl_device_type & CL_DEVICE_TYPE_CPU))
+  {
+    if (strncmp (device_param->device_name, "AMD EPYC", 8) == 0)
+    {
+      // works on Linux: AMD EPYC 7642 48-Core Processor, OpenCL 2.1 (Build 0)
+      return false;
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
 u64 module_tmp_size (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSED const user_options_t *user_options, MAYBE_UNUSED const user_options_extra_t *user_options_extra)
 {
   const u64 tmp_size = (const u64) sizeof (qnx_sha512_tmp_t);
@@ -110,7 +126,7 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
     iter = hc_strtoul ((const char *) token.buf[1] + 2, NULL, 10);
   }
 
-  // iter++; the additinal round is added in the init kernel
+  // iter++; the additional round is added in the init kernel
 
   salt->salt_iter = iter;
 
@@ -118,14 +134,14 @@ int module_hash_decode (MAYBE_UNUSED const hashconfig_t *hashconfig, MAYBE_UNUSE
 
   if (token.len[2] != 128) return (PARSER_HASH_LENGTH);
 
-  digest[0] = hex_to_u64 ((const u8 *) token.buf[2] +   0);
-  digest[1] = hex_to_u64 ((const u8 *) token.buf[2] +  16);
-  digest[2] = hex_to_u64 ((const u8 *) token.buf[2] +  32);
-  digest[3] = hex_to_u64 ((const u8 *) token.buf[2] +  48);
-  digest[4] = hex_to_u64 ((const u8 *) token.buf[2] +  64);
-  digest[5] = hex_to_u64 ((const u8 *) token.buf[2] +  80);
-  digest[6] = hex_to_u64 ((const u8 *) token.buf[2] +  96);
-  digest[7] = hex_to_u64 ((const u8 *) token.buf[2] + 112);
+  digest[0] = hex_to_u64 (token.buf[2] +   0);
+  digest[1] = hex_to_u64 (token.buf[2] +  16);
+  digest[2] = hex_to_u64 (token.buf[2] +  32);
+  digest[3] = hex_to_u64 (token.buf[2] +  48);
+  digest[4] = hex_to_u64 (token.buf[2] +  64);
+  digest[5] = hex_to_u64 (token.buf[2] +  80);
+  digest[6] = hex_to_u64 (token.buf[2] +  96);
+  digest[7] = hex_to_u64 (token.buf[2] + 112);
 
   // salt
 
@@ -199,6 +215,8 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_benchmark_mask           = MODULE_DEFAULT;
   module_ctx->module_benchmark_charset        = MODULE_DEFAULT;
   module_ctx->module_benchmark_salt           = MODULE_DEFAULT;
+  module_ctx->module_bridge_name              = MODULE_DEFAULT;
+  module_ctx->module_bridge_type              = MODULE_DEFAULT;
   module_ctx->module_build_plain_postprocess  = MODULE_DEFAULT;
   module_ctx->module_deep_comp_kernel         = MODULE_DEFAULT;
   module_ctx->module_deprecated_notice        = MODULE_DEFAULT;
@@ -264,6 +282,6 @@ void module_init (module_ctx_t *module_ctx)
   module_ctx->module_st_hash                  = module_st_hash;
   module_ctx->module_st_pass                  = module_st_pass;
   module_ctx->module_tmp_size                 = module_tmp_size;
-  module_ctx->module_unstable_warning         = MODULE_DEFAULT;
+  module_ctx->module_unstable_warning         = module_unstable_warning;
   module_ctx->module_warmup_disable           = MODULE_DEFAULT;
 }
