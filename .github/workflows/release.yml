@@ -42,7 +42,7 @@ jobs:
             os_name: Windows
             os_name_lowercase: windows
 
-    name: Build ${{ matrix.os_name }} (${{ matrix.shared == 0 }})
+    name: Build ${{ matrix.os_name }} (${{ matrix.shared == 0 && 'Static' || 'Shared' }})
     runs-on: ${{ (matrix.os == 'freebsd' || matrix.os == 'openbsd' || matrix.os == 'netbsd' || matrix.os == 'dragonflybsd') && 'ubuntu-latest' || matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +138,7 @@ jobs:
         with:
           name: hashcat-${{ matrix.os_name_lowercase }}-${{ matrix.shared == 0 && 'static' || 'shared' }}
           path: ${{ env.include_paths }}
+          
   build_binaries:
     name: Build binaries (Linux and Windows)
     runs-on: ubuntu-latest
