@@ -1,5 +1,6 @@
 fn main() {
     bindgen::Builder::default()
+        .clang_arg("-D__BINDGEN__")
         .header("src/hashcat_types.h")
         .generate()
         .expect("Unable to generate bindings")
