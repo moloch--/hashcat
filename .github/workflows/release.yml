@@ -47,6 +47,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref }}
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          fetch-depth: 0
 
       - name: Install dependencies (Windows only)
         if: matrix.os_name_lowercase == 'windows'
@@ -136,6 +137,104 @@ jobs:
         with:
           name: hashcat-${{ matrix.os_name_lowercase }}-${{ matrix.shared == 0 && 'static' || 'shared' }}
           path: ${{ env.include_paths }}
+
+      - name: Check if tag is on master
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: release_gate
+        shell: bash
+        run: |
+          git fetch --no-tags origin master
+          if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/master"; then
+            echo "is_on_master=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "is_on_master=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Detect architecture
+        if: startsWith(github.ref, 'refs/tags/v') && steps.release_gate.outputs.is_on_master == 'true'
+        id: arch
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import platform
+
+          arch = platform.machine().lower()
+          if arch in ("amd64", "x86_64"):
+            arch = "amd64"
+          elif arch in ("arm64", "aarch64"):
+            arch = "arm64"
+          output = os.environ["GITHUB_OUTPUT"]
+          with open(output, "a", encoding="utf-8") as fh:
+            fh.write(f"name={arch}\n")
+          print(f"Detected arch: {arch}")
+          PY
+
+      - name: Create release zip
+        if: startsWith(github.ref, 'refs/tags/v') && steps.release_gate.outputs.is_on_master == 'true'
+        shell: bash
+        env:
+          INCLUDE_PATHS: ${{ env.include_paths }}
+          OS_NAME: ${{ matrix.os_name_lowercase }}
+        run: |
+          python - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+          import platform
+
+          include_paths = os.environ["INCLUDE_PATHS"].splitlines()
+          include_paths = [p.strip() for p in include_paths if p.strip()]
+          os_name = os.environ["OS_NAME"]
+          if os_name == "macos":
+            os_name = "darwin"
+          arch = platform.machine().lower()
+          if arch in ("amd64", "x86_64"):
+            arch = "amd64"
+          elif arch in ("arm64", "aarch64"):
+            arch = "arm64"
+          zip_name = f"hashcat_{os_name}-{arch}.zip"
+          zip_path = Path(zip_name)
+
+          def add_path(zf, path):
+            path = Path(path)
+            if path.is_dir():
+              for file_path in path.rglob("*"):
+                if file_path.is_file():
+                  zf.write(file_path, file_path.as_posix())
+            elif path.is_file():
+              zf.write(path, path.as_posix())
+
+          with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for entry in include_paths:
+              for path in Path(".").glob(entry):
+                add_path(zf, path)
+
+          print(f"Created {zip_name}")
+          PY
+      - name: Create or update GitHub release
+        if: startsWith(github.ref, 'refs/tags/v') && steps.release_gate.outputs.is_on_master == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --notes "Automated release for ${GITHUB_REF_NAME}"
+          fi
+
+      - name: Upload release assets
+        if: startsWith(github.ref, 'refs/tags/v') && steps.release_gate.outputs.is_on_master == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          os_name="${{ matrix.os_name_lowercase }}"
+          if [ "${os_name}" = "macos" ]; then
+            os_name="darwin"
+          fi
+          gh release upload "${GITHUB_REF_NAME}" "hashcat_${os_name}-${{ steps.arch.outputs.name }}.zip" --clobber
   build_binaries:
     name: Build binaries (Linux and Windows)
     runs-on: ubuntu-latest
