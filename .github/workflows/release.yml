@@ -1,0 +1,175 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-amd64
+            runner: ubuntu-22.04
+            os_slug: linux
+            arch: amd64
+            artifact_name: hashcat_linux-amd64.zip
+            shell: bash
+          - label: windows-amd64
+            runner: windows-2022
+            os_slug: windows
+            arch: amd64
+            artifact_name: hashcat_windows-amd64.zip
+            shell: msys2 {0}
+          - label: darwin-arm64
+            runner: macos-14
+            os_slug: darwin
+            arch: arm64
+            artifact_name: hashcat_darwin-arm64.zip
+            shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Validate tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow only runs on tags" >&2
+            exit 1
+          fi
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must match v1.2.3" >&2
+            exit 1
+          fi
+          git fetch origin master:master
+          if ! git branch --contains "${GITHUB_SHA}" master >/dev/null 2>&1; then
+            echo "Tag must point to master" >&2
+            git branch --contains "${GITHUB_SHA}" || true
+            exit 1
+          fi
+
+      - name: Setup Python 3.12 (Linux/macOS)
+        if: matrix.os_slug != 'windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build deps (Linux)
+        if: matrix.os_slug == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc g++ make zip pkg-config libssl-dev zlib1g-dev ocl-icd-opencl-dev
+
+      - name: Install build deps (macOS)
+        if: matrix.os_slug == 'darwin'
+        run: |
+          brew update
+          brew install zip
+
+      - name: Setup MSYS2 (Windows)
+        if: matrix.os_slug == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-cmake
+            zip
+
+      - name: Build
+        shell: ${{ matrix.shell }}
+        env:
+          WIN_ICONV: /mingw64
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          make clean
+          make -j$(command -v nproc >/dev/null && nproc || sysctl -n hw.logicalcpu)
+
+      - name: Package artifacts
+        shell: ${{ matrix.shell }}
+        env:
+          PKG: hashcat_${{ matrix.os_slug }}-${{ matrix.arch }}
+          ARCHIVE: ${{ matrix.artifact_name }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p "$PKG"
+          shopt -s nullglob
+          for bin in hashcat hashcat.bin hashcat.exe; do
+            [ -f "$bin" ] && cp "$bin" "$PKG/"
+          done
+          cp hashcat.hcstat2 "$PKG/"
+          for dir in OpenCL docs charsets layouts masks rules extra tunings bridges feeds modules Python Rust; do
+            [ -d "$dir" ] && cp -a "$dir" "$PKG/"
+          done
+          for sample in example*.hash example*.cmd example*.sh example.dict; do
+            [ -f "$sample" ] && cp "$sample" "$PKG/"
+          done
+          zip -r "$ARCHIVE" "$PKG"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag points to master
+        run: |
+          set -euo pipefail
+          git fetch origin master:master
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must match v1.2.3" >&2
+            exit 1
+          fi
+          if ! git branch --contains "${GITHUB_SHA}" master >/dev/null 2>&1; then
+            echo "Tag must point to master" >&2
+            git branch --contains "${GITHUB_SHA}" || true
+            exit 1
+          fi
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: hashcat_*.zip
+          merge-multiple: true
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+          else
+            gh release create "$TAG" --title "hashcat $TAG" --notes "Automated release for $TAG"
+          fi
+          gh release upload "$TAG" hashcat_*.zip --clobber
