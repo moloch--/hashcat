@@ -105,8 +105,18 @@ jobs:
             mingw-w64-x86_64-cmake
             zip
 
-      - name: Build
-        shell: ${{ matrix.shell }}
+      - name: Build (Linux/macOS)
+        if: matrix.os_slug != 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          make clean
+          make -j$(command -v nproc >/dev/null && nproc || sysctl -n hw.logicalcpu)
+
+      - name: Build (Windows)
+        if: matrix.os_slug == 'windows'
+        shell: msys2 {0}
         env:
           WIN_ICONV: /mingw64
         run: |
@@ -115,8 +125,32 @@ jobs:
           make clean
           make -j$(command -v nproc >/dev/null && nproc || sysctl -n hw.logicalcpu)
 
-      - name: Package artifacts
-        shell: ${{ matrix.shell }}
+      - name: Package artifacts (Linux/macOS)
+        if: matrix.os_slug != 'windows'
+        shell: bash
+        env:
+          PKG: hashcat_${{ matrix.os_slug }}-${{ matrix.arch }}
+          ARCHIVE: ${{ matrix.artifact_name }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p "$PKG"
+          shopt -s nullglob
+          for bin in hashcat hashcat.bin hashcat.exe; do
+            [ -f "$bin" ] && cp "$bin" "$PKG/"
+          done
+          cp hashcat.hcstat2 "$PKG/"
+          for dir in OpenCL docs charsets layouts masks rules extra tunings bridges feeds modules Python Rust; do
+            [ -d "$dir" ] && cp -a "$dir" "$PKG/"
+          done
+          for sample in example*.hash example*.cmd example*.sh example.dict; do
+            [ -f "$sample" ] && cp "$sample" "$PKG/"
+          done
+          zip -r "$ARCHIVE" "$PKG"
+
+      - name: Package artifacts (Windows)
+        if: matrix.os_slug == 'windows'
+        shell: msys2 {0}
         env:
           PKG: hashcat_${{ matrix.os_slug }}-${{ matrix.arch }}
           ARCHIVE: ${{ matrix.artifact_name }}
