@@ -193,3 +193,50 @@ jobs:
         with:
           name: hashcat-${{ matrix.os_name_lowercase }}-cross
           path: ${{ env.include_paths }}
+
+  release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - build_binaries
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version tag on current commit
+        id: tag
+        run: |
+          tag=$(git tag --points-at HEAD 'v*.*.*' | head -n 1)
+          if [ -n "$tag" ]; then
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download build artifacts
+        if: steps.tag.outputs.tag != ''
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Package artifacts
+        if: steps.tag.outputs.tag != ''
+        run: |
+          mkdir -p release
+          for dir in dist/*; do
+            if [ -d "$dir" ]; then
+              name=$(basename "$dir")
+              tar -C "$dir" -czf "release/${name}.tar.gz" .
+            fi
+          done
+
+      - name: Create or update GitHub release
+        if: steps.tag.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --generate-notes
+          fi
+          gh release upload "$tag" release/*.tar.gz --clobber
