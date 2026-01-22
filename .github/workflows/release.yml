@@ -112,7 +112,12 @@ jobs:
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
           make clean
-          make -j$(command -v nproc >/dev/null && nproc || sysctl -n hw.logicalcpu)
+          if [[ "${{ matrix.os_slug }}" == "darwin" ]]; then
+            make -j$(command -v nproc >/dev/null && nproc || sysctl -n hw.logicalcpu) \
+              CFLAGS_LZMA="-D_7ZIP_ST -march=armv8.2-a+sha2"
+          else
+            make -j$(command -v nproc >/dev/null && nproc || sysctl -n hw.logicalcpu)
+          fi
 
       - name: Build (Windows)
         if: matrix.os_slug == 'windows'
