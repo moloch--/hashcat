@@ -29,8 +29,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest, freebsd, openbsd, netbsd, dragonflybsd]
-        shared: [0, 1]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        shared: [0]
         include:
           - os: ubuntu-latest
             os_name: Linux
